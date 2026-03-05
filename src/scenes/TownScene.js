@@ -97,7 +97,7 @@ export class TownScene extends Phaser.Scene {
     g.generateTexture('town-grass', ts, ts);
     g.clear();
 
-    // Town path textures are loaded from cobblestone tile assets (cobblestone-0 through cobblestone-15)
+    // Town path texture is loaded from cobblestone tile asset
 
     // Building wall - wooden planks with grain
     g.fillStyle(0x6b4423, 1);
@@ -209,22 +209,13 @@ export class TownScene extends Phaser.Scene {
           wall.body.setSize(ts, ts);
           this.wallLayer.add(wall);
         } else if (tile === 2) {
-          const variant = this.getCobblestoneVariant(x, y);
-          this.add.image(px, py, `cobblestone-${variant}`).setDepth(0);
+          this.add.image(px, py, 'town-path').setDepth(0);
         } else if (tile === 3) {
-          const variant = this.getCobblestoneVariant(x, y);
-          this.add.image(px, py, `cobblestone-${variant}`).setDepth(0);
+          this.add.image(px, py, 'town-path').setDepth(0);
           this.add.image(px, py, 'dungeon-entrance').setDepth(1);
         }
       }
     }
-  }
-
-  getCobblestoneVariant(x, y) {
-    // Deterministic pseudo-random selection based on tile position
-    // Uses all 16 variants (0-15) for natural lighting variety
-    const hash = Math.abs((x * 7) + (y * 13) + (x * y * 3)) % 16;
-    return hash;
   }
 
   createNPCs(ts) {
