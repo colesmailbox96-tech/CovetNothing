@@ -71,58 +71,9 @@ export class TownScene extends Phaser.Scene {
   createTileTextures(ts) {
     const g = this.add.graphics();
 
-    // Town grass - lush with varied blades and patches
-    g.fillStyle(0x3a6b35, 1);
-    g.fillRect(0, 0, ts, ts);
-    // Grass blade clusters
-    g.fillStyle(0x2d5a2a, 0.4);
-    g.fillRect(4, 6, 2, 3);
-    g.fillRect(15, 3, 2, 3);
-    g.fillRect(8, 20, 2, 3);
-    g.fillRect(22, 15, 2, 3);
-    g.fillRect(12, 12, 2, 2);
-    g.fillRect(26, 5, 2, 3);
-    // Light grass highlights
-    g.fillStyle(0x4a8040, 0.3);
-    g.fillRect(6, 2, 3, 2);
-    g.fillRect(20, 10, 3, 2);
-    g.fillRect(2, 16, 2, 2);
-    g.fillRect(28, 24, 2, 2);
-    g.fillRect(14, 26, 3, 2);
-    // Tiny flowers / dirt specks
-    g.fillStyle(0x6b8550, 0.25);
-    g.fillRect(10, 8, 1, 1);
-    g.fillRect(24, 20, 1, 1);
-    g.fillRect(18, 28, 1, 1);
-    g.generateTexture('town-grass', ts, ts);
-    g.clear();
+    // Town grass texture is loaded from tile asset
 
-    // Town path - cobblestone with varied stones
-    g.fillStyle(0x8b7355, 1);
-    g.fillRect(0, 0, ts, ts);
-    // Cobblestone grid
-    g.lineStyle(1, 0x6b5335, 0.5);
-    g.lineBetween(0, 10, ts, 10);
-    g.lineBetween(0, 22, ts, 22);
-    g.lineBetween(8, 0, 8, 10);
-    g.lineBetween(20, 0, 20, 10);
-    g.lineBetween(14, 10, 14, 22);
-    g.lineBetween(28, 10, 28, 22);
-    g.lineBetween(6, 22, 6, ts);
-    g.lineBetween(18, 22, 18, ts);
-    // Highlights on stone tops
-    g.fillStyle(0x9b8365, 0.3);
-    g.fillRect(2, 2, 5, 3);
-    g.fillRect(10, 2, 8, 3);
-    g.fillRect(22, 2, 6, 3);
-    g.fillRect(2, 12, 10, 3);
-    g.fillRect(16, 12, 10, 3);
-    // Wear marks
-    g.fillStyle(0x7a6245, 0.3);
-    g.fillRect(4, 24, 4, 2);
-    g.fillRect(20, 26, 5, 2);
-    g.generateTexture('town-path', ts, ts);
-    g.clear();
+    // Town path texture is loaded from cobblestone tile asset
 
     // Building wall - wooden planks with grain
     g.fillStyle(0x6b4423, 1);
