@@ -97,32 +97,7 @@ export class TownScene extends Phaser.Scene {
     g.generateTexture('town-grass', ts, ts);
     g.clear();
 
-    // Town path - cobblestone with varied stones
-    g.fillStyle(0x8b7355, 1);
-    g.fillRect(0, 0, ts, ts);
-    // Cobblestone grid
-    g.lineStyle(1, 0x6b5335, 0.5);
-    g.lineBetween(0, 10, ts, 10);
-    g.lineBetween(0, 22, ts, 22);
-    g.lineBetween(8, 0, 8, 10);
-    g.lineBetween(20, 0, 20, 10);
-    g.lineBetween(14, 10, 14, 22);
-    g.lineBetween(28, 10, 28, 22);
-    g.lineBetween(6, 22, 6, ts);
-    g.lineBetween(18, 22, 18, ts);
-    // Highlights on stone tops
-    g.fillStyle(0x9b8365, 0.3);
-    g.fillRect(2, 2, 5, 3);
-    g.fillRect(10, 2, 8, 3);
-    g.fillRect(22, 2, 6, 3);
-    g.fillRect(2, 12, 10, 3);
-    g.fillRect(16, 12, 10, 3);
-    // Wear marks
-    g.fillStyle(0x7a6245, 0.3);
-    g.fillRect(4, 24, 4, 2);
-    g.fillRect(20, 26, 5, 2);
-    g.generateTexture('town-path', ts, ts);
-    g.clear();
+    // Town path textures are loaded from cobblestone tile assets (cobblestone-0 through cobblestone-15)
 
     // Building wall - wooden planks with grain
     g.fillStyle(0x6b4423, 1);
@@ -234,13 +209,22 @@ export class TownScene extends Phaser.Scene {
           wall.body.setSize(ts, ts);
           this.wallLayer.add(wall);
         } else if (tile === 2) {
-          this.add.image(px, py, 'town-path').setDepth(0);
+          const variant = this.getCobblestoneVariant(x, y);
+          this.add.image(px, py, `cobblestone-${variant}`).setDepth(0);
         } else if (tile === 3) {
-          this.add.image(px, py, 'town-path').setDepth(0);
+          const variant = this.getCobblestoneVariant(x, y);
+          this.add.image(px, py, `cobblestone-${variant}`).setDepth(0);
           this.add.image(px, py, 'dungeon-entrance').setDepth(1);
         }
       }
     }
+  }
+
+  getCobblestoneVariant(x, y) {
+    // Deterministic pseudo-random selection based on tile position
+    // Uses all 16 variants (0-15) for natural lighting variety
+    const hash = ((x * 7) + (y * 13) + (x * y * 3)) % 16;
+    return hash;
   }
 
   createNPCs(ts) {
