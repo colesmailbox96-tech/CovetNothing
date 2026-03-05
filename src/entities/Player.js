@@ -78,14 +78,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const animKey = `player-attack-${this.facing}`;
     if (this.anims.animationManager.exists(animKey)) {
       this.play(animKey);
-      this.once('animationcomplete', () => {
-        this.isAttacking = false;
-      });
       // Safety fallback: ensure isAttacking resets even if the animation is interrupted
       const anim = this.anims.animationManager.get(animKey);
       const duration = (anim.frames.length / anim.frameRate) * 1000 + 50;
-      this.scene.time.delayedCall(duration, () => {
+      const fallback = this.scene.time.delayedCall(duration, () => {
         this.isAttacking = false;
+      });
+      this.once('animationcomplete', () => {
+        this.isAttacking = false;
+        fallback.remove(false);
       });
     } else {
       this.scene.time.delayedCall(300, () => {
