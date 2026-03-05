@@ -48,9 +48,6 @@ export class DungeonScene extends Phaser.Scene {
     // Create stairs sprite
     this.createStairs(dungeon.stairsPos);
 
-    // Loot drops on ground
-    this.lootDrops = [];
-
     // Combat events
     this.events.on('playerAttack', this.handlePlayerAttack, this);
     this.events.on('enemyDeath', this.handleEnemyDeath, this);
@@ -74,36 +71,88 @@ export class DungeonScene extends Phaser.Scene {
     // Create tileset texture programmatically
     const tileGraphics = this.add.graphics();
 
-    // Wall tile
+    // Wall tile - stone brick pattern with depth
     tileGraphics.fillStyle(0x2a1a3a, 1);
     tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.lineStyle(1, 0x3a2a4a, 0.5);
+    // Brick horizontal lines
+    tileGraphics.lineStyle(1, 0x1a0e28, 0.8);
+    tileGraphics.lineBetween(0, 8, this.tileSize, 8);
+    tileGraphics.lineBetween(0, 16, this.tileSize, 16);
+    tileGraphics.lineBetween(0, 24, this.tileSize, 24);
+    // Brick vertical offset lines
+    tileGraphics.lineBetween(8, 0, 8, 8);
+    tileGraphics.lineBetween(24, 0, 24, 8);
+    tileGraphics.lineBetween(16, 8, 16, 16);
+    tileGraphics.lineBetween(0, 8, 0, 16);
+    tileGraphics.lineBetween(8, 16, 8, 24);
+    tileGraphics.lineBetween(24, 16, 24, 24);
+    tileGraphics.lineBetween(16, 24, 16, 32);
+    // Highlight edges for depth
+    tileGraphics.fillStyle(0x3f2852, 0.4);
+    tileGraphics.fillRect(1, 1, this.tileSize - 2, 1);
+    tileGraphics.fillRect(1, 9, this.tileSize - 2, 1);
+    tileGraphics.fillRect(1, 17, this.tileSize - 2, 1);
+    tileGraphics.fillRect(1, 25, this.tileSize - 2, 1);
+    // Dark mortar shadows
+    tileGraphics.fillStyle(0x150b20, 0.5);
+    tileGraphics.fillRect(0, 7, this.tileSize, 1);
+    tileGraphics.fillRect(0, 15, this.tileSize, 1);
+    tileGraphics.fillRect(0, 23, this.tileSize, 1);
+    tileGraphics.lineStyle(1, 0x3a2a4a, 0.3);
     tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
     tileGraphics.generateTexture('tile-wall', this.tileSize, this.tileSize);
     tileGraphics.clear();
 
-    // Floor tile
+    // Floor tile - worn stone texture with cracks and variation
     tileGraphics.fillStyle(0x4a3a2a, 1);
     tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    // Add subtle variation
-    tileGraphics.fillStyle(0x3d3025, 0.3);
-    tileGraphics.fillRect(2, 2, 4, 4);
-    tileGraphics.fillRect(14, 8, 3, 3);
-    tileGraphics.fillRect(8, 20, 5, 3);
-    tileGraphics.fillRect(24, 14, 3, 4);
-    tileGraphics.lineStyle(1, 0x5a4a3a, 0.2);
+    // Stone slab pattern
+    tileGraphics.lineStyle(1, 0x3d3025, 0.4);
+    tileGraphics.lineBetween(0, 16, this.tileSize, 16);
+    tileGraphics.lineBetween(16, 0, 16, this.tileSize);
+    // Subtle noise and wear marks
+    tileGraphics.fillStyle(0x3d3025, 0.25);
+    tileGraphics.fillRect(2, 2, 5, 3);
+    tileGraphics.fillRect(20, 5, 4, 4);
+    tileGraphics.fillRect(8, 20, 6, 3);
+    tileGraphics.fillRect(24, 22, 3, 5);
+    tileGraphics.fillRect(10, 10, 3, 2);
+    // Light highlight spots
+    tileGraphics.fillStyle(0x5a4a3a, 0.2);
+    tileGraphics.fillRect(4, 12, 3, 2);
+    tileGraphics.fillRect(18, 2, 4, 2);
+    tileGraphics.fillRect(26, 14, 3, 3);
+    tileGraphics.fillRect(6, 26, 4, 2);
+    // Crack detail
+    tileGraphics.lineStyle(1, 0x2e2218, 0.3);
+    tileGraphics.lineBetween(3, 5, 8, 9);
+    tileGraphics.lineBetween(22, 18, 28, 22);
+    tileGraphics.lineStyle(1, 0x5a4a3a, 0.15);
     tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
     tileGraphics.generateTexture('tile-floor', this.tileSize, this.tileSize);
     tileGraphics.clear();
 
-    // Stairs tile
+    // Stairs tile - carved stone steps with shadow/depth
     tileGraphics.fillStyle(0x6a5a3a, 1);
     tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.fillStyle(0x8a7a4a, 1);
-    tileGraphics.fillRect(4, 4, 24, 4);
-    tileGraphics.fillRect(6, 10, 20, 4);
-    tileGraphics.fillRect(8, 16, 16, 4);
-    tileGraphics.fillRect(10, 22, 12, 4);
+    // Step surfaces (light)
+    tileGraphics.fillStyle(0x9a8a5a, 1);
+    tileGraphics.fillRect(2, 2, 28, 5);
+    tileGraphics.fillRect(4, 9, 24, 5);
+    tileGraphics.fillRect(6, 16, 20, 5);
+    tileGraphics.fillRect(8, 23, 16, 5);
+    // Step shadow edges (dark)
+    tileGraphics.fillStyle(0x4a3a1a, 0.8);
+    tileGraphics.fillRect(2, 7, 28, 2);
+    tileGraphics.fillRect(4, 14, 24, 2);
+    tileGraphics.fillRect(6, 21, 20, 2);
+    tileGraphics.fillRect(8, 28, 16, 2);
+    // Highlight top edge of each step
+    tileGraphics.fillStyle(0xbaa86a, 0.5);
+    tileGraphics.fillRect(2, 2, 28, 1);
+    tileGraphics.fillRect(4, 9, 24, 1);
+    tileGraphics.fillRect(6, 16, 20, 1);
+    tileGraphics.fillRect(8, 23, 16, 1);
     tileGraphics.generateTexture('tile-stairs', this.tileSize, this.tileSize);
     tileGraphics.destroy();
 
@@ -251,32 +300,14 @@ export class DungeonScene extends Phaser.Scene {
       this.player.hp = this.player.getMaxHP();
     }
 
-    // Roll loot
+    // Roll loot - items go directly to inventory
     const drops = LootSystem.rollDrops(data.enemyType, this.currentFloor);
     for (const drop of drops) {
-      this.spawnLootDrop(data.x, data.y, drop);
+      this.inventory.addItem(drop.itemId, drop.quantity);
+      this.showPopup(data.x, data.y + 10, `+${drop.name}`, '#ffffff');
     }
 
     this.updateUI();
-  }
-
-  spawnLootDrop(x, y, drop) {
-    const offset = Phaser.Math.Between(-15, 15);
-    const lootSprite = this.add.image(x + offset, y + offset, drop.icon);
-    lootSprite.setScale(0.4);
-    lootSprite.setDepth(5);
-    lootSprite.itemData = drop;
-
-    // Bounce in effect
-    this.tweens.add({
-      targets: lootSprite,
-      y: lootSprite.y - 10,
-      yoyo: true,
-      repeat: -1,
-      duration: 600,
-    });
-
-    this.lootDrops.push(lootSprite);
   }
 
   handlePlayerDeath() {
@@ -322,6 +353,7 @@ export class DungeonScene extends Phaser.Scene {
       floor: this.currentFloor,
       attack: this.levelSystem.getAttack(),
       location: 'dungeon',
+      inventory: this.inventory.getItems(),
     });
   }
 
@@ -354,28 +386,6 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
-  checkLootPickup() {
-    for (let i = this.lootDrops.length - 1; i >= 0; i--) {
-      const loot = this.lootDrops[i];
-      if (!loot || !loot.active) {
-        this.lootDrops.splice(i, 1);
-        continue;
-      }
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y,
-        loot.x, loot.y
-      );
-      if (dist < 25) {
-        // Pick up
-        this.inventory.addItem(loot.itemData.itemId, loot.itemData.quantity);
-        this.showPopup(loot.x, loot.y, `+${loot.itemData.name}`, '#ffffff');
-        loot.destroy();
-        this.lootDrops.splice(i, 1);
-        this.updateUI();
-      }
-    }
-  }
-
   goToNextFloor() {
     this.scene.restart({ floor: this.currentFloor + 1 });
   }
@@ -392,7 +402,6 @@ export class DungeonScene extends Phaser.Scene {
     if (this.player && this.player.active) {
       this.player.update(time, delta);
       this.checkStairsOverlap();
-      this.checkLootPickup();
       this.updateMinimap();
       this.updateUI();
     }
