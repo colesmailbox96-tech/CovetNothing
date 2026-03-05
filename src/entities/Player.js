@@ -81,6 +81,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.once('animationcomplete', () => {
         this.isAttacking = false;
       });
+      // Safety fallback: ensure isAttacking resets even if the animation is interrupted
+      const anim = this.anims.animationManager.get(animKey);
+      const duration = (anim.frames.length / anim.frameRate) * 1000 + 50;
+      this.scene.time.delayedCall(duration, () => {
+        this.isAttacking = false;
+      });
     } else {
       this.scene.time.delayedCall(300, () => {
         this.isAttacking = false;
@@ -141,6 +147,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Attack with space
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
       this.tryAttack();
+      if (this.isAttacking) {
+        this.setVelocity(0, 0);
+        return;
+      }
     }
 
     if (vx !== 0 || vy !== 0) {
