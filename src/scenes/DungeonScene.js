@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG } from '../config.js';
+import { GAME_CONFIG, getDirection } from '../config.js';
 import { DungeonGenerator } from '../systems/DungeonGenerator.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Player } from '../entities/Player.js';
@@ -371,12 +371,40 @@ export class DungeonScene extends Phaser.Scene {
     this.minimapPlayerDot.y = this.mmOffsetY + tileY * this.mmScale + this.mmScale / 2;
   }
 
+  findNearestEnemyInRange() {
+    const reach = GAME_CONFIG.PLAYER_ATTACK_REACH;
+    let nearest = null;
+    let nearestDist = Infinity;
+    const enemies = this.enemies.getChildren();
+    for (const enemy of enemies) {
+      if (!enemy.active || enemy.state === 'dead') continue;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+      if (dist < reach + 20 && dist < nearestDist) {
+        nearest = enemy;
+        nearestDist = dist;
+      }
+    }
+    return nearest;
+  }
+
   update(time, delta) {
     if (this.player && this.player.active) {
       this.player.update(time, delta);
       this.checkStairsOverlap();
       this.updateMinimap();
       this.updateUI();
+
+      // Auto-attack: while in combat mode, attack nearest enemy in range
+      if (this.player.autoRetaliateTimer > 0 && !this.player.isAttacking && this.player.attackCooldown <= 0) {
+        const nearest = this.findNearestEnemyInRange();
+        if (nearest) {
+          const dx = nearest.x - this.player.x;
+          const dy = nearest.y - this.player.y;
+          const dir = getDirection(dx, dy);
+          if (dir) this.player.facing = dir;
+          this.player.tryAttack();
+        }
+      }
     }
 
     // Update enemies
