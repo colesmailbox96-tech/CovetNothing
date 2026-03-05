@@ -67,7 +67,7 @@ export class DungeonGenerator {
           const prev = this.rooms[this.rooms.length - 1];
           const prevIndex = this.rooms.length - 1;
           const path = this.carveCorridor(prev.cx, prev.cy, newRoom.cx, newRoom.cy, roomIndex);
-          const doorPos = this.findDoorPosition(path, newRoom);
+          const doorPos = this.findDoorPosition(path, prev);
           this.connections.push({
             fromRoom: prevIndex,
             toRoom: roomIndex,
@@ -181,16 +181,13 @@ export class DungeonGenerator {
     return path;
   }
 
-  findDoorPosition(path, destRoom) {
-    // Find the last corridor tile before entering the destination room
+  findDoorPosition(path, fromRoom) {
+    // Find the first corridor tile just outside the source room wall
     for (let i = 0; i < path.length; i++) {
       const p = path[i];
-      if (p.x >= destRoom.x && p.x < destRoom.x + destRoom.w &&
-          p.y >= destRoom.y && p.y < destRoom.y + destRoom.h) {
-        // This tile is inside destRoom; use the tile before it as door position
-        if (i > 0) {
-          return { x: path[i - 1].x, y: path[i - 1].y };
-        }
+      if (!(p.x >= fromRoom.x && p.x < fromRoom.x + fromRoom.w &&
+            p.y >= fromRoom.y && p.y < fromRoom.y + fromRoom.h)) {
+        // First tile outside fromRoom — this is on the wall
         return { x: p.x, y: p.y };
       }
     }

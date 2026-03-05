@@ -25,12 +25,12 @@ export const GAME_CONFIG = {
   FLOOR_EXP_SCALE: 0.1,
 
   // Dungeon generation
-  DUNGEON_WIDTH: 50,
-  DUNGEON_HEIGHT: 50,
-  MIN_ROOM_SIZE: 5,
-  MAX_ROOM_SIZE: 10,
+  DUNGEON_WIDTH: 70,
+  DUNGEON_HEIGHT: 70,
+  MIN_ROOM_SIZE: 8,
+  MAX_ROOM_SIZE: 14,
   MAX_ROOMS: 12,
-  ENEMIES_PER_ROOM: 2,
+  ENEMIES_PER_ROOM: 5,
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];
