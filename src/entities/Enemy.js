@@ -168,6 +168,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.attackCooldown -= delta;
     }
 
+    // Don't change AI state while attack animation is playing
+    if (this.isAttacking) {
+      this.setVelocity(0, 0);
+      return;
+    }
+
     if (!player || !player.active || player.hp <= 0) {
       this.doPatrol(delta);
       return;
@@ -175,8 +181,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
-    if (dist < this.data_.attackRange && this.attackCooldown <= 0) {
-      this.doAttack(player);
+    if (dist < this.data_.attackRange) {
+      if (this.attackCooldown <= 0) {
+        this.doAttack(player);
+      } else {
+        // In attack range but on cooldown — stand still and face the player
+        this.setVelocity(0, 0);
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dir = getDirection(dx, dy);
+        if (dir) this.facing = dir;
+        this.playIdle();
+      }
     } else if (dist < this.data_.aggroRange) {
       this.doChase(player);
     } else {
@@ -251,7 +267,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (!this.active || this.state === 'dead') return;
       const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
       if (dist < this.data_.attackRange * 1.5) {
-        player.takeDamage(this.data_.attack);
+        player.takeDamage(this.data_.attack, this.x, this.y);
       }
     });
   }

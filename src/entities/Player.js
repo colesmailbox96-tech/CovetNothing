@@ -14,6 +14,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.attackCooldown = 0;
     this.invulnerable = false;
     this.invulnerableTimer = 0;
+    this.autoRetaliateTimer = 0;
 
     // Set up physics body
     this.setScale(0.5);
@@ -45,7 +46,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hp = Math.min(this.hp + amount, this.getMaxHP());
   }
 
-  takeDamage(amount) {
+  takeDamage(amount, attackerX, attackerY) {
     if (this.invulnerable) return;
 
     this.hp -= amount;
@@ -61,6 +62,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
+      return;
+    }
+
+    // Auto-retaliate: face attacker and strike back
+    if (attackerX !== undefined && attackerY !== undefined) {
+      const dx = attackerX - this.x;
+      const dy = attackerY - this.y;
+      const dir = getDirection(dx, dy);
+      if (dir) this.facing = dir;
+      this.tryAttack();
+      // Enter combat mode — auto-attack nearby enemies for a duration
+      this.autoRetaliateTimer = 3000;
     }
   }
 
@@ -128,6 +141,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.invulnerable = false;
         this.clearTint();
       }
+    }
+    if (this.autoRetaliateTimer > 0) {
+      this.autoRetaliateTimer -= delta;
     }
 
     // Movement
