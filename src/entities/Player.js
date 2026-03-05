@@ -73,7 +73,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (dir) this.facing = dir;
       this.tryAttack();
       // Enter combat mode — auto-attack nearby enemies for a duration
-      this.autoRetaliateTimer = 3000;
+      this.autoRetaliateTimer = GAME_CONFIG.PLAYER_COMBAT_MODE_DURATION;
     }
   }
 
