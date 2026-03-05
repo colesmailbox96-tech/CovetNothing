@@ -223,7 +223,7 @@ export class TownScene extends Phaser.Scene {
   getCobblestoneVariant(x, y) {
     // Deterministic pseudo-random selection based on tile position
     // Uses all 16 variants (0-15) for natural lighting variety
-    const hash = ((x * 7) + (y * 13) + (x * y * 3)) % 16;
+    const hash = Math.abs((x * 7) + (y * 13) + (x * y * 3)) % 16;
     return hash;
   }
 
