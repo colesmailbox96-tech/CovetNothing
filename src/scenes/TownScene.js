@@ -71,31 +71,7 @@ export class TownScene extends Phaser.Scene {
   createTileTextures(ts) {
     const g = this.add.graphics();
 
-    // Town grass - lush with varied blades and patches
-    g.fillStyle(0x3a6b35, 1);
-    g.fillRect(0, 0, ts, ts);
-    // Grass blade clusters
-    g.fillStyle(0x2d5a2a, 0.4);
-    g.fillRect(4, 6, 2, 3);
-    g.fillRect(15, 3, 2, 3);
-    g.fillRect(8, 20, 2, 3);
-    g.fillRect(22, 15, 2, 3);
-    g.fillRect(12, 12, 2, 2);
-    g.fillRect(26, 5, 2, 3);
-    // Light grass highlights
-    g.fillStyle(0x4a8040, 0.3);
-    g.fillRect(6, 2, 3, 2);
-    g.fillRect(20, 10, 3, 2);
-    g.fillRect(2, 16, 2, 2);
-    g.fillRect(28, 24, 2, 2);
-    g.fillRect(14, 26, 3, 2);
-    // Tiny flowers / dirt specks
-    g.fillStyle(0x6b8550, 0.25);
-    g.fillRect(10, 8, 1, 1);
-    g.fillRect(24, 20, 1, 1);
-    g.fillRect(18, 28, 1, 1);
-    g.generateTexture('town-grass', ts, ts);
-    g.clear();
+    // Town grass texture is loaded from tile asset
 
     // Town path texture is loaded from cobblestone tile asset
 

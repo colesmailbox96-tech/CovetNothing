@@ -103,34 +103,7 @@ export class DungeonScene extends Phaser.Scene {
     tileGraphics.generateTexture('tile-wall', this.tileSize, this.tileSize);
     tileGraphics.clear();
 
-    // Floor tile - worn stone texture with cracks and variation
-    tileGraphics.fillStyle(0x4a3a2a, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    // Stone slab pattern
-    tileGraphics.lineStyle(1, 0x3d3025, 0.4);
-    tileGraphics.lineBetween(0, 16, this.tileSize, 16);
-    tileGraphics.lineBetween(16, 0, 16, this.tileSize);
-    // Subtle noise and wear marks
-    tileGraphics.fillStyle(0x3d3025, 0.25);
-    tileGraphics.fillRect(2, 2, 5, 3);
-    tileGraphics.fillRect(20, 5, 4, 4);
-    tileGraphics.fillRect(8, 20, 6, 3);
-    tileGraphics.fillRect(24, 22, 3, 5);
-    tileGraphics.fillRect(10, 10, 3, 2);
-    // Light highlight spots
-    tileGraphics.fillStyle(0x5a4a3a, 0.2);
-    tileGraphics.fillRect(4, 12, 3, 2);
-    tileGraphics.fillRect(18, 2, 4, 2);
-    tileGraphics.fillRect(26, 14, 3, 3);
-    tileGraphics.fillRect(6, 26, 4, 2);
-    // Crack detail
-    tileGraphics.lineStyle(1, 0x2e2218, 0.3);
-    tileGraphics.lineBetween(3, 5, 8, 9);
-    tileGraphics.lineBetween(22, 18, 28, 22);
-    tileGraphics.lineStyle(1, 0x5a4a3a, 0.15);
-    tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.generateTexture('tile-floor', this.tileSize, this.tileSize);
-    tileGraphics.clear();
+    // Floor tile is loaded from dungeon-floor tile asset
 
     // Stairs tile - carved stone steps with shadow/depth
     tileGraphics.fillStyle(0x6a5a3a, 1);
@@ -167,7 +140,7 @@ export class DungeonScene extends Phaser.Scene {
         const tile = dungeon.map[y][x];
 
         if (tile === 0 || tile === 2) {
-          const floor = this.add.image(px, py, 'tile-floor').setDepth(0);
+          const floor = this.add.image(px, py, 'dungeon-floor').setDepth(0);
           this.floorGroup.add(floor);
         }
         if (tile === 1) {
