@@ -1,0 +1,26 @@
+{
+  "name": "covetnothing",
+  "version": "0.1.0",
+  "description": "Covet Nothing - A Pixel Fantasy Roguelike RPG Dungeon Crawler",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/colesmailbox96-tech/CovetNothing.git"
+  },
+  "keywords": ["roguelike", "rpg", "dungeon-crawler", "phaser"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/colesmailbox96-tech/CovetNothing/issues"
+  },
+  "homepage": "https://github.com/colesmailbox96-tech/CovetNothing#readme",
+  "dependencies": {
+    "phaser": "^3.88.2",
+    "vite": "^6.2.1"
+  }
+}
