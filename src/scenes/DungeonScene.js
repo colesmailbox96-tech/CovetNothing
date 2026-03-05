@@ -231,7 +231,7 @@ export class DungeonScene extends Phaser.Scene {
             this.wallLayer.add(wall);
 
             // Determine room ownership for wall visibility
-            const adjOwner = this.getAdjacentFloorOwner(dungeon, x, y);
+            const adjOwner = this.getHighestAdjacentRoomOwner(dungeon, x, y);
             if (adjOwner >= 0 && this.roomTiles[adjOwner]) {
               this.roomTiles[adjOwner].walls.push(wallImg);
               this.roomTiles[adjOwner].wallBodies.push(wall);
@@ -245,7 +245,7 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
-  getAdjacentFloorOwner(dungeon, x, y) {
+  getHighestAdjacentRoomOwner(dungeon, x, y) {
     // Return the highest room index of any adjacent floor tile
     let maxOwner = -1;
     for (let dy = -1; dy <= 1; dy++) {
@@ -482,7 +482,8 @@ export class DungeonScene extends Phaser.Scene {
   // Check if the player has entered a revealed but uncleared combat room
   checkRoomEntry() {
     const currentRoom = this.getPlayerRoom();
-    if (currentRoom <= 0) return; // Room 0 is safe, -1 means corridor/invalid
+    // Room 0 is the safe room (no combat), negative values mean corridor/invalid tiles
+    if (currentRoom < 0 || currentRoom === 0) return;
 
     // Check if this room is revealed but not yet cleared or in combat
     if (this.revealedRooms.has(currentRoom) &&
@@ -588,13 +589,18 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   openDoor(door) {
-    // Determine which room to reveal
-    const playerRoom = this.getPlayerRoom();
+    // Determine which room to reveal: pick the unrevealed room
     let targetRoom;
-    if (playerRoom === door.fromRoom || this.revealedRooms.has(door.fromRoom)) {
+    const fromRevealed = this.revealedRooms.has(door.fromRoom);
+    const toRevealed = this.revealedRooms.has(door.toRoom);
+
+    if (!toRevealed) {
       targetRoom = door.toRoom;
-    } else {
+    } else if (!fromRevealed) {
       targetRoom = door.fromRoom;
+    } else {
+      // Both already revealed - just open the door
+      targetRoom = null;
     }
 
     // Remove prompt
@@ -603,8 +609,10 @@ export class DungeonScene extends Phaser.Scene {
       door.prompt = null;
     }
 
-    // Reveal the target room
-    this.revealRoom(targetRoom);
+    // Reveal the target room (if there is one to reveal)
+    if (targetRoom !== null) {
+      this.revealRoom(targetRoom);
+    }
 
     // Open the door (make passable)
     door.state = 'open';

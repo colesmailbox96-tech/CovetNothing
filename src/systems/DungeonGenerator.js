@@ -89,9 +89,9 @@ export class DungeonGenerator {
     this.stairsPos = { x: lastRoom.cx, y: lastRoom.cy };
     this.map[lastRoom.cy][lastRoom.cx] = 2;
 
-    // Crafting bench in safe room (offset from center)
-    const benchX = Math.min(firstRoom.cx + 2, firstRoom.x + firstRoom.w - 2);
-    const benchY = Math.max(firstRoom.cy - 1, firstRoom.y + 1);
+    // Crafting bench in safe room (offset from center, clamped within room bounds)
+    const benchX = Math.max(firstRoom.x + 1, Math.min(firstRoom.cx + 2, firstRoom.x + firstRoom.w - 2));
+    const benchY = Math.max(firstRoom.y + 1, Math.min(firstRoom.cy - 1, firstRoom.y + firstRoom.h - 2));
     this.craftingBenchPos = { x: benchX, y: benchY };
 
     // Place enemies in rooms (skip first room - safe room)
