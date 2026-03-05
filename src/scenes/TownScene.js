@@ -71,41 +71,105 @@ export class TownScene extends Phaser.Scene {
   createTileTextures(ts) {
     const g = this.add.graphics();
 
-    // Town grass
+    // Town grass - lush with varied blades and patches
     g.fillStyle(0x3a6b35, 1);
     g.fillRect(0, 0, ts, ts);
-    g.fillStyle(0x2d5a2a, 0.3);
-    g.fillRect(4, 6, 2, 2);
-    g.fillRect(15, 3, 2, 2);
-    g.fillRect(8, 20, 2, 2);
-    g.fillRect(22, 15, 3, 2);
+    // Grass blade clusters
+    g.fillStyle(0x2d5a2a, 0.4);
+    g.fillRect(4, 6, 2, 3);
+    g.fillRect(15, 3, 2, 3);
+    g.fillRect(8, 20, 2, 3);
+    g.fillRect(22, 15, 2, 3);
+    g.fillRect(12, 12, 2, 2);
+    g.fillRect(26, 5, 2, 3);
+    // Light grass highlights
+    g.fillStyle(0x4a8040, 0.3);
+    g.fillRect(6, 2, 3, 2);
+    g.fillRect(20, 10, 3, 2);
+    g.fillRect(2, 16, 2, 2);
+    g.fillRect(28, 24, 2, 2);
+    g.fillRect(14, 26, 3, 2);
+    // Tiny flowers / dirt specks
+    g.fillStyle(0x6b8550, 0.25);
+    g.fillRect(10, 8, 1, 1);
+    g.fillRect(24, 20, 1, 1);
+    g.fillRect(18, 28, 1, 1);
     g.generateTexture('town-grass', ts, ts);
     g.clear();
 
-    // Town path
+    // Town path - cobblestone with varied stones
     g.fillStyle(0x8b7355, 1);
     g.fillRect(0, 0, ts, ts);
+    // Cobblestone grid
+    g.lineStyle(1, 0x6b5335, 0.5);
+    g.lineBetween(0, 10, ts, 10);
+    g.lineBetween(0, 22, ts, 22);
+    g.lineBetween(8, 0, 8, 10);
+    g.lineBetween(20, 0, 20, 10);
+    g.lineBetween(14, 10, 14, 22);
+    g.lineBetween(28, 10, 28, 22);
+    g.lineBetween(6, 22, 6, ts);
+    g.lineBetween(18, 22, 18, ts);
+    // Highlights on stone tops
     g.fillStyle(0x9b8365, 0.3);
-    g.fillRect(3, 5, 4, 3);
-    g.fillRect(16, 12, 5, 3);
+    g.fillRect(2, 2, 5, 3);
+    g.fillRect(10, 2, 8, 3);
+    g.fillRect(22, 2, 6, 3);
+    g.fillRect(2, 12, 10, 3);
+    g.fillRect(16, 12, 10, 3);
+    // Wear marks
+    g.fillStyle(0x7a6245, 0.3);
+    g.fillRect(4, 24, 4, 2);
+    g.fillRect(20, 26, 5, 2);
     g.generateTexture('town-path', ts, ts);
     g.clear();
 
-    // Building wall
+    // Building wall - wooden planks with grain
     g.fillStyle(0x6b4423, 1);
     g.fillRect(0, 0, ts, ts);
-    g.lineStyle(1, 0x8b6243, 0.5);
+    // Plank horizontal lines
+    g.lineStyle(1, 0x5a3618, 0.7);
+    g.lineBetween(0, 8, ts, 8);
+    g.lineBetween(0, 16, ts, 16);
+    g.lineBetween(0, 24, ts, 24);
+    // Wood grain detail
+    g.fillStyle(0x7b5433, 0.3);
+    g.fillRect(2, 1, 10, 1);
+    g.fillRect(18, 10, 8, 1);
+    g.fillRect(5, 18, 12, 1);
+    g.fillRect(20, 26, 6, 1);
+    // Highlight top edge of planks
+    g.fillStyle(0x8b6243, 0.3);
+    g.fillRect(0, 0, ts, 1);
+    g.fillRect(0, 9, ts, 1);
+    g.fillRect(0, 17, ts, 1);
+    g.fillRect(0, 25, ts, 1);
+    g.lineStyle(1, 0x8b6243, 0.4);
     g.strokeRect(0, 0, ts, ts);
     g.generateTexture('town-wall', ts, ts);
     g.clear();
 
-    // Dungeon entrance
+    // Dungeon entrance - dark portal with glow
     g.fillStyle(0x1a0a2a, 1);
     g.fillRect(0, 0, ts, ts);
-    g.fillStyle(0x3a1a4a, 1);
+    g.fillStyle(0x2a1240, 1);
     g.fillRect(4, 0, ts - 8, ts);
-    g.fillStyle(0xff6600, 0.6);
-    g.fillRect(ts / 2 - 3, ts / 2 - 3, 6, 6);
+    // Inner glow layers
+    g.fillStyle(0x3a1a55, 0.6);
+    g.fillRect(8, 4, ts - 16, ts - 8);
+    g.fillStyle(0x4a2a65, 0.4);
+    g.fillRect(10, 8, ts - 20, ts - 16);
+    // Bright center orb
+    g.fillStyle(0xff6600, 0.8);
+    g.fillRect(ts / 2 - 4, ts / 2 - 4, 8, 8);
+    g.fillStyle(0xffaa44, 0.5);
+    g.fillRect(ts / 2 - 2, ts / 2 - 2, 4, 4);
+    // Corner rune marks
+    g.fillStyle(0x8844aa, 0.4);
+    g.fillRect(2, 2, 3, 3);
+    g.fillRect(ts - 5, 2, 3, 3);
+    g.fillRect(2, ts - 5, 3, 3);
+    g.fillRect(ts - 5, ts - 5, 3, 3);
     g.generateTexture('dungeon-entrance', ts, ts);
     g.clear();
 

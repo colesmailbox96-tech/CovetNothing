@@ -121,9 +121,79 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.uiContainer.add(this.controlsHint);
 
+    // ---- Item Icons Bar (always visible, bottom-left) ----
+    this.createItemIconsBar(width, height);
+
     // ---- Inventory Panel (if open) ----
     if (this.showInventory) {
       this.createInventoryPanel(width, height);
+    }
+  }
+
+  createItemIconsBar(width, height) {
+    const items = this.stats.inventory || [];
+    if (items.length === 0) return;
+
+    const iconSize = 32;
+    const iconPad = 6;
+    const barX = 10;
+    const barY = height - 56;
+
+    // Background for the item bar
+    const totalWidth = items.length * (iconSize + iconPad) + iconPad;
+    const barBg = this.add.rectangle(
+      barX - 4, barY - 4,
+      totalWidth + 4, iconSize + 8,
+      0x000000, 0.6
+    ).setOrigin(0, 0);
+    const barBorder = this.add.rectangle(
+      barX - 4, barY - 4,
+      totalWidth + 4, iconSize + 8
+    ).setOrigin(0, 0);
+    barBorder.setStrokeStyle(1, 0x555555);
+    this.uiContainer.add([barBg, barBorder]);
+
+    let offsetX = barX;
+    for (const item of items) {
+      // Item slot background
+      const slotBg = this.add.rectangle(
+        offsetX, barY, iconSize, iconSize,
+        0x1a1a2e, 0.8
+      ).setOrigin(0, 0);
+      const slotBorder = this.add.rectangle(
+        offsetX, barY, iconSize, iconSize
+      ).setOrigin(0, 0);
+      slotBorder.setStrokeStyle(1, 0x4a4a6e);
+      this.uiContainer.add([slotBg, slotBorder]);
+
+      // Item icon
+      if (item.icon && this.textures.exists(item.icon)) {
+        const icon = this.add.image(
+          offsetX + iconSize / 2,
+          barY + iconSize / 2,
+          item.icon
+        ).setDisplaySize(iconSize - 6, iconSize - 6);
+        this.uiContainer.add(icon);
+      }
+
+      // Quantity text in bottom-right corner of the icon
+      if (item.quantity > 0) {
+        const qtyText = this.add.text(
+          offsetX + iconSize - 2,
+          barY + iconSize - 2,
+          `${item.quantity}`, {
+            fontSize: '10px',
+            fill: '#ffffff',
+            fontFamily: 'monospace',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2,
+          }
+        ).setOrigin(1, 1);
+        this.uiContainer.add(qtyText);
+      }
+
+      offsetX += iconSize + iconPad;
     }
   }
 

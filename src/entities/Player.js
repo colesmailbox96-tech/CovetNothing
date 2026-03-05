@@ -130,11 +130,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    if (this.isAttacking) {
-      this.setVelocity(0, 0);
-      return;
-    }
-
     // Movement
     let vx = 0;
     let vy = 0;
@@ -145,13 +140,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.cursors.up.isDown || this.wasd.up.isDown) vy = -1;
     else if (this.cursors.down.isDown || this.wasd.down.isDown) vy = 1;
 
-    // Attack with space
+    // Attack with space (allowed while moving)
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
       this.tryAttack();
-      if (this.isAttacking) {
-        this.setVelocity(0, 0);
-        return;
-      }
     }
 
     if (vx !== 0 || vy !== 0) {
@@ -162,20 +153,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const dir = getDirection(vx, vy);
       if (dir) {
         this.facing = dir;
-        const runAnim = `player-run-${dir}`;
-        if (this.anims.animationManager.exists(runAnim)) {
-          if (this.anims.currentAnim?.key !== runAnim) {
-            this.play(runAnim, true);
+        // Only change to run animation if not currently attacking
+        if (!this.isAttacking) {
+          const runAnim = `player-run-${dir}`;
+          if (this.anims.animationManager.exists(runAnim)) {
+            if (this.anims.currentAnim?.key !== runAnim) {
+              this.play(runAnim, true);
+            }
           }
         }
       }
     } else {
       this.setVelocity(0, 0);
-      // Idle
-      const idleKey = `player-idle-${this.facing}`;
-      if (this.scene.textures.exists(idleKey)) {
-        this.setTexture(idleKey);
-        this.anims.stop();
+      // Idle (only if not attacking)
+      if (!this.isAttacking) {
+        const idleKey = `player-idle-${this.facing}`;
+        if (this.scene.textures.exists(idleKey)) {
+          this.setTexture(idleKey);
+          this.anims.stop();
+        }
       }
     }
   }
