@@ -84,9 +84,9 @@ export class CraftingSystem {
   static craft(recipe, inventory) {
     if (!CraftingSystem.canCraft(recipe, inventory)) return false;
 
-    // Consume ingredients – canCraft already verified quantities are sufficient
+    // Consume ingredients
     for (const ing of recipe.ingredients) {
-      if (!inventory.removeItem(ing.itemId, ing.qty)) return false;
+      inventory.removeItem(ing.itemId, ing.qty);
     }
 
     // Add result

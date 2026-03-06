@@ -440,8 +440,8 @@ export class UIScene extends Phaser.Scene {
     this.uiContainer.add(this.goldText);
 
     const equipY = goldY + 14;
-    const weaponName = this.stats.equipment.weapon ? this.stats.equipment.weapon.name : 'None';
-    const armorName = this.stats.equipment.armor ? this.stats.equipment.armor.name : 'None';
+    const weaponName = (this.stats.equipment && this.stats.equipment.weapon && this.stats.equipment.weapon.name) || 'None';
+    const armorName = (this.stats.equipment && this.stats.equipment.armor && this.stats.equipment.armor.name) || 'None';
     this.equipText = this.add.text(panelX, equipY,
       `⚔${weaponName}  🛡${armorName}`, {
         fontSize: '8px', fill: '#aaccff', fontFamily: 'monospace',
