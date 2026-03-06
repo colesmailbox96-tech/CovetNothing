@@ -52,6 +52,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invulnerable = true;
     this.invulnerableTimer = 500;
 
+    // Haptic feedback on taking damage
+    if (navigator.vibrate) navigator.vibrate(30);
+
     // Flash effect
     this.setTint(0xff0000);
     this.scene.time.delayedCall(200, () => {

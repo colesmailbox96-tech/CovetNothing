@@ -236,7 +236,7 @@ export class TownScene extends Phaser.Scene {
     zone.npcLabel = label;
     this.physics.add.overlap(this.player, zone, () => {
       if (!zone.promptText) {
-        zone.promptText = this.add.text(x, y + 18, 'Press E', {
+        zone.promptText = this.add.text(x, y + 18, this._interactHint(), {
           fontSize: '7px',
           fill: '#ffffff',
           fontFamily: 'monospace',
@@ -354,7 +354,7 @@ export class TownScene extends Phaser.Scene {
           if (!this.dungeonPrompt) {
             this.dungeonPrompt = this.add.text(
               this.dungeonEntrance.x, this.dungeonEntrance.y + 20,
-              'Press E to enter', {
+              this._interactHint('enter'), {
                 fontSize: '7px',
                 fill: '#ffffff',
                 fontFamily: 'monospace',
@@ -392,6 +392,15 @@ export class TownScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /** Return a touch-aware interaction prompt */
+  _interactHint(action) {
+    const ui = this.scene.get('UIScene');
+    if (ui && ui.isTouchDevice) {
+      return action ? `Tap to ${action}` : 'Tap';
+    }
+    return action ? `Press E to ${action}` : 'Press E';
   }
 
   /** Called from UIScene when the touch E button is pressed */

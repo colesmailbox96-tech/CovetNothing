@@ -16,7 +16,7 @@ const config = {
     height: 600,
   },
   input: {
-    activePointers: 3,
+    activePointers: 4,
     touch: { capture: true },
   },
   physics: {
