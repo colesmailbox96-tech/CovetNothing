@@ -2,11 +2,12 @@ import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config.js';
 
 export class LevelSystem {
-  constructor(equipmentSystem = null) {
+  constructor(equipmentSystem = null, statusEffects = null) {
     this.level = 1;
     this.exp = 0;
     this.gold = 0;
     this.equipmentSystem = equipmentSystem;
+    this.statusEffects = statusEffects;
   }
 
   getExpForNextLevel() {
@@ -43,7 +44,9 @@ export class LevelSystem {
 
   getAttack() {
     const base = GAME_CONFIG.PLAYER_BASE_ATTACK + (this.level - 1) * GAME_CONFIG.PLAYER_ATTACK_PER_LEVEL;
-    return base + (this.equipmentSystem ? this.equipmentSystem.getBonusAttack() : 0);
+    const equipBonus = this.equipmentSystem ? this.equipmentSystem.getBonusAttack() : 0;
+    const buffBonus = this.statusEffects ? this.statusEffects.getBonusAttack() : 0;
+    return base + equipBonus + buffBonus;
   }
 
   getDefense() {

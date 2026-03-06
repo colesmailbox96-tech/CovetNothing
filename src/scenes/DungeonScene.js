@@ -10,6 +10,8 @@ import { ENEMY_DATA } from '../data/enemies.js';
 import { EquipmentSystem } from '../systems/EquipmentSystem.js';
 import { CraftingSystem } from '../systems/CraftingSystem.js';
 import { ITEM_DATA } from '../data/items.js';
+import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
+import { RunStats } from '../systems/RunStats.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -21,6 +23,21 @@ export class DungeonScene extends Phaser.Scene {
     this.levelSystem = this.registry.get('levelSystem');
     this.inventory = this.registry.get('inventory');
     this.equipmentSystem = this.registry.get('equipmentSystem');
+    this.statusEffects = this.registry.get('statusEffects');
+    if (!this.statusEffects) {
+      this.statusEffects = new StatusEffectSystem();
+      this.registry.set('statusEffects', this.statusEffects);
+    }
+    if (this.levelSystem && !this.levelSystem.statusEffects) {
+      this.levelSystem.statusEffects = this.statusEffects;
+    }
+    this.runStats = this.registry.get('runStats');
+    if (!this.runStats) {
+      this.runStats = new RunStats();
+      this.registry.set('runStats', this.runStats);
+    }
+    // Record floor on entry
+    this.runStats.recordFloorDescended(this.currentFloor);
   }
 
   create() {
@@ -63,6 +80,9 @@ export class DungeonScene extends Phaser.Scene {
     this.events.on('playerAttack', this.handlePlayerAttack, this);
     this.events.on('enemyDeath', this.handleEnemyDeath, this);
     this.events.on('playerDeath', this.handlePlayerDeath, this);
+    this.events.on('playerDamageTaken', (amount) => {
+      this.runStats.recordDamageTaken(amount);
+    });
 
     // Build node minimap
     this.createNodeMinimap();
@@ -203,6 +223,52 @@ export class DungeonScene extends Phaser.Scene {
     g.generateTexture('tile-chest-open', ts, ts);
     g.clear();
 
+    // Campfire (for rest rooms)
+    g.fillStyle(0x3a2a1a, 1);
+    g.fillRect(0, 0, ts, ts);
+    // Logs
+    g.fillStyle(0x5a3a18, 1);
+    g.fillRect(6, 20, 20, 5);
+    g.fillRect(10, 18, 12, 4);
+    // Flame layers
+    g.fillStyle(0xff4400, 0.9);
+    g.fillRect(10, 8, 12, 14);
+    g.fillStyle(0xff8800, 0.8);
+    g.fillRect(12, 6, 8, 12);
+    g.fillStyle(0xffcc00, 0.7);
+    g.fillRect(13, 8, 6, 8);
+    g.fillStyle(0xffee66, 0.5);
+    g.fillRect(14, 10, 4, 4);
+    // Ember glow on ground
+    g.fillStyle(0xff6600, 0.3);
+    g.fillRect(4, 22, 24, 6);
+    g.generateTexture('tile-campfire', ts, ts);
+    g.clear();
+
+    // Merchant marker
+    g.fillStyle(0x1a1a2e, 1);
+    g.fillRect(0, 0, ts, ts);
+    // Cart/stall
+    g.fillStyle(0x6a4a2a, 1);
+    g.fillRect(2, 14, ts - 4, 14);
+    g.fillStyle(0x8a6a3a, 1);
+    g.fillRect(2, 10, ts - 4, 6);
+    // Canopy
+    g.fillStyle(0xaa3333, 0.8);
+    g.fillRect(0, 2, ts, 10);
+    g.fillStyle(0xcc5555, 0.6);
+    g.fillRect(0, 2, 8, 10);
+    g.fillRect(16, 2, 8, 10);
+    // Wares on counter
+    g.fillStyle(0x44ff88, 0.7);
+    g.fillRect(6, 15, 5, 5);
+    g.fillStyle(0xff6644, 0.7);
+    g.fillRect(14, 16, 4, 4);
+    g.fillStyle(0xffdd44, 0.7);
+    g.fillRect(22, 15, 4, 5);
+    g.generateTexture('tile-merchant', ts, ts);
+    g.clear();
+
     g.destroy();
   }
 
@@ -249,6 +315,21 @@ export class DungeonScene extends Phaser.Scene {
     this.treasureChestOpened = false;
     if (node.type === 'treasure' && !node.chestLooted) {
       this._createTreasureChest(roomData);
+    }
+
+    // Campfire (rest rooms)
+    this.campfire = null;
+    this.campfirePrompt = null;
+    this.campfireUsed = !!node.campfireUsed;
+    if (node.type === 'rest') {
+      this._createCampfire(roomData);
+    }
+
+    // Merchant (merchant rooms)
+    this.merchant = null;
+    this.merchantPrompt = null;
+    if (node.type === 'merchant') {
+      this._createMerchant(roomData);
     }
 
     // Doors
@@ -337,6 +418,16 @@ export class DungeonScene extends Phaser.Scene {
     // Treasure chest
     if (this.treasureChest) { this.treasureChest.destroy(); this.treasureChest = null; }
     if (this.treasureChestPrompt) { this.treasureChestPrompt.destroy(); this.treasureChestPrompt = null; }
+
+    // Campfire
+    if (this.campfire) { this.campfire.destroy(); this.campfire = null; }
+    if (this.campfirePrompt) { this.campfirePrompt.destroy(); this.campfirePrompt = null; }
+    if (this._campfireGlow) { this._campfireGlow.destroy(); this._campfireGlow = null; }
+
+    // Merchant
+    if (this.merchant) { this.merchant.destroy(); this.merchant = null; }
+    if (this.merchantPrompt) { this.merchantPrompt.destroy(); this.merchantPrompt = null; }
+    if (this._merchantLabel) { this._merchantLabel.destroy(); this._merchantLabel = null; }
 
     // Wall visuals stored separately
     if (this._wallImages) {
@@ -544,6 +635,7 @@ export class DungeonScene extends Phaser.Scene {
       node.cleared = true;
       this.activeCombatRoom = -1;
       this.waveActive = false;
+      this.runStats.recordRoomCleared();
 
       this._unlockAllDoors();
 
@@ -585,6 +677,58 @@ export class DungeonScene extends Phaser.Scene {
     this.treasureChest = this.add.image(cx, cy, 'tile-chest').setDepth(2);
     this.treasureChestPrompt = null;
     this.treasureChestOpened = false;
+  }
+
+  _createCampfire(roomData) {
+    const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
+    this.campfire = this.add.image(cx, cy, 'tile-campfire').setDepth(2);
+
+    // Ambient glow circle
+    this._campfireGlow = this.add.circle(cx, cy, 40, 0xff6600, 0.12).setDepth(1);
+    this.tweens.add({
+      targets: this._campfireGlow,
+      alpha: 0.06,
+      scaleX: 0.9,
+      scaleY: 0.9,
+      yoyo: true,
+      repeat: -1,
+      duration: 1200,
+    });
+
+    // Flame flicker
+    this.tweens.add({
+      targets: this.campfire,
+      scaleX: 0.95,
+      scaleY: 1.05,
+      yoyo: true,
+      repeat: -1,
+      duration: 400,
+    });
+  }
+
+  _createMerchant(roomData) {
+    const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
+    this.merchant = this.add.image(cx, cy, 'tile-merchant').setDepth(2);
+
+    this._merchantLabel = this.add.text(cx, cy - 22, 'Merchant', {
+      fontSize: '8px',
+      fill: '#ffdd44',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(6);
+
+    // Gentle bob animation
+    this.tweens.add({
+      targets: this.merchant,
+      y: cy - 2,
+      yoyo: true,
+      repeat: -1,
+      duration: 1000,
+    });
   }
 
   goToNextFloor() {
@@ -840,6 +984,54 @@ export class DungeonScene extends Phaser.Scene {
       }
     }
 
+    // Campfire (rest rooms)
+    if (this.campfire && !this.campfireUsed) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.campfire.x, this.campfire.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        if (!this.campfirePrompt) {
+          this.campfirePrompt = this.add.text(
+            this.campfire.x, this.campfire.y - 20,
+            this._interactHint('Rest'),
+            { fontSize: '10px', fill: '#44ff88', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2 }
+          ).setOrigin(0.5).setDepth(20);
+        }
+        if (justPressedE && !nearDoor) {
+          this._useCampfire();
+        }
+      } else if (this.campfirePrompt) {
+        this.campfirePrompt.destroy();
+        this.campfirePrompt = null;
+      }
+    }
+
+    // Merchant
+    if (this.merchant) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.merchant.x, this.merchant.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        if (!this.merchantPrompt) {
+          this.merchantPrompt = this.add.text(
+            this.merchant.x, this.merchant.y + 22,
+            this._interactHint('Trade'),
+            { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2 }
+          ).setOrigin(0.5).setDepth(20);
+        }
+        if (justPressedE && !nearDoor) {
+          this._openMerchantShop();
+        }
+      } else if (this.merchantPrompt) {
+        this.merchantPrompt.destroy();
+        this.merchantPrompt = null;
+      }
+    }
+
     // Stairs
     this._checkStairsOverlap(justPressedE);
   }
@@ -913,6 +1105,28 @@ export class DungeonScene extends Phaser.Scene {
       }
     }
 
+    if (this.campfire && !this.campfireUsed) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.campfire.x, this.campfire.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        this._useCampfire();
+        return;
+      }
+    }
+
+    if (this.merchant) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.merchant.x, this.merchant.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        this._openMerchantShop();
+        return;
+      }
+    }
+
     if (this.stairs && this.stairs.visible) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x, this.player.y,
@@ -961,30 +1175,85 @@ export class DungeonScene extends Phaser.Scene {
 
   _usePotion() {
     if (!this.player || !this.player.active) return;
+
+    // Try heal potions first (only if not at full HP)
+    if (this.player.hp < this.player.getMaxHP()) {
+      let potionId = null;
+      if (this.inventory.items['greater-health-potion'] > 0) {
+        potionId = 'greater-health-potion';
+      } else if (this.inventory.items['health-potion'] > 0) {
+        potionId = 'health-potion';
+      }
+
+      if (potionId) {
+        const itemData = ITEM_DATA[potionId];
+        this.inventory.removeItem(potionId, 1);
+        const healAmount = itemData.effect.heal;
+        this.player.heal(healAmount);
+        this.runStats.recordPotionUsed();
+        this.showPopup(this.player.x, this.player.y - 20, `+${healAmount} HP`, '#44ff44');
+        this.updateUI();
+        return;
+      }
+    }
+
+    // Try buff potions if at full HP or no heal potions
+    for (const buffId of ['strength-potion', 'speed-potion']) {
+      if (this.inventory.items[buffId] > 0) {
+        const itemData = ITEM_DATA[buffId];
+        this.inventory.removeItem(buffId, 1);
+        const eff = itemData.effect;
+        this.statusEffects.apply(eff.buff, itemData.name, 'buff', eff.duration, eff.magnitude);
+        this.runStats.recordPotionUsed();
+        const durSec = Math.round(eff.duration / 1000);
+        this.showPopup(this.player.x, this.player.y - 20, `${itemData.name} (${durSec}s)`, '#66aaff');
+        this.updateUI();
+        return;
+      }
+    }
+
     if (this.player.hp >= this.player.getMaxHP()) {
-      this.showPopup(this.player.x, this.player.y - 20, 'Already at full HP!', '#aaaaaa');
-      return;
-    }
-
-    // Try greater potion first, then regular
-    let potionId = null;
-    if (this.inventory.items['greater-health-potion'] > 0) {
-      potionId = 'greater-health-potion';
-    } else if (this.inventory.items['health-potion'] > 0) {
-      potionId = 'health-potion';
-    }
-
-    if (!potionId) {
+      this.showPopup(this.player.x, this.player.y - 20, 'No potions!', '#aaaaaa');
+    } else {
       this.showPopup(this.player.x, this.player.y - 20, 'No potions!', '#ff6644');
-      return;
+    }
+  }
+
+  _useCampfire() {
+    if (this.campfireUsed) return;
+    this.campfireUsed = true;
+
+    // Mark on the graph node so re-entering doesn't allow re-use
+    const node = this.graph.rooms[this.currentRoomId];
+    node.campfireUsed = true;
+
+    if (this.campfirePrompt) {
+      this.campfirePrompt.destroy();
+      this.campfirePrompt = null;
     }
 
-    const itemData = ITEM_DATA[potionId];
-    this.inventory.removeItem(potionId, 1);
-    const healAmount = itemData.effect.heal;
-    this.player.heal(healAmount);
-    this.showPopup(this.player.x, this.player.y - 20, `+${healAmount} HP`, '#44ff44');
+    // Heal to full
+    const healAmount = this.player.getMaxHP() - this.player.hp;
+    this.player.hp = this.player.getMaxHP();
+
+    if (healAmount > 0) {
+      this.showPopup(this.campfire.x, this.campfire.y - 30, `Fully rested! +${healAmount} HP`, '#44ff88');
+    } else {
+      this.showPopup(this.campfire.x, this.campfire.y - 30, 'You feel well rested.', '#44ff88');
+    }
+
+    // Dim campfire to show it's used
+    this.tweens.killTweensOf(this.campfire);
+    this.campfire.setAlpha(0.5);
+
     this.updateUI();
+  }
+
+  _openMerchantShop() {
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene) {
+      uiScene.showMerchantPanel(this.inventory, this.levelSystem, this.currentFloor);
+    }
   }
 
   // ===================== COMBAT EVENTS =====================
@@ -996,6 +1265,7 @@ export class DungeonScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(attackData.x, attackData.y, enemy.x, enemy.y);
       if (dist < attackData.reach + 20) {
         enemy.takeDamage(attackData.damage);
+        this.runStats.recordDamageDealt(attackData.damage);
       }
     }
   }
@@ -1004,12 +1274,15 @@ export class DungeonScene extends Phaser.Scene {
     const enemyData = ENEMY_DATA[data.enemyType];
     if (!enemyData) return;
 
+    this.runStats.recordKill();
+
     const goldAmount = this.levelSystem.getScaledGold(
       enemyData.gold.min, enemyData.gold.max, this.currentFloor
     );
     const expAmount = this.levelSystem.getScaledExp(enemyData.exp, this.currentFloor);
 
     this.levelSystem.addGold(goldAmount);
+    this.runStats.recordGold(goldAmount);
     const leveledUp = this.levelSystem.addExp(expAmount);
 
     this.showPopup(data.x, data.y - 10, `+${goldAmount}g +${expAmount}xp`, '#ffdd44');
@@ -1022,6 +1295,7 @@ export class DungeonScene extends Phaser.Scene {
     const drops = LootSystem.rollDrops(data.enemyType, this.currentFloor);
     for (const drop of drops) {
       this.inventory.addItem(drop.itemId, drop.quantity);
+      this.runStats.recordItemFound();
       this.showPopup(data.x, data.y + 10, `+${drop.name}`, '#ffffff');
     }
 
@@ -1033,9 +1307,20 @@ export class DungeonScene extends Phaser.Scene {
     const lostGold = Math.floor(this.levelSystem.gold * 0.1);
     this.levelSystem.gold -= lostGold;
 
+    // Show death summary
+    const summary = this.runStats.getSummary();
     this.showPopup(this.player.x, this.player.y, 'YOU DIED', '#ff0000');
 
-    this.time.delayedCall(1500, () => {
+    // Display run summary via UIScene overlay
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene) {
+      uiScene.showDeathSummary(summary, lostGold);
+    }
+
+    this.time.delayedCall(4000, () => {
+      if (uiScene) uiScene._destroyOverlayPanel();
+      this.runStats.reset();
+      this.statusEffects.clear();
       this.scene.start('TownScene');
     });
   }
@@ -1075,6 +1360,7 @@ export class DungeonScene extends Phaser.Scene {
       },
       location: 'dungeon',
       inventory: this.inventory.getItems(),
+      activeEffects: this.statusEffects ? this.statusEffects.getActiveEffects() : [],
     });
   }
 
@@ -1095,6 +1381,11 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    // Tick status effects
+    if (this.statusEffects) {
+      this.statusEffects.update(delta);
+    }
+
     if (this.player && this.player.active) {
       this.player.update(time, delta);
       this.checkInteractions();

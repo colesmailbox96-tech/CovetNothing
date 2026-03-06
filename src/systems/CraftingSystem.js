@@ -53,6 +53,18 @@ export const RECIPES = [
     ingredients: [{ itemId: 'temple-ash', qty: 3 }, { itemId: 'polished-beetle-eye', qty: 1 }],
     result: { itemId: 'greater-health-potion', qty: 1 },
   },
+  {
+    id: 'strength-potion',
+    name: 'Strength Potion',
+    ingredients: [{ itemId: 'bones', qty: 3 }, { itemId: 'temple-ash', qty: 2 }],
+    result: { itemId: 'strength-potion', qty: 1 },
+  },
+  {
+    id: 'speed-potion',
+    name: 'Speed Potion',
+    ingredients: [{ itemId: 'temple-ash', qty: 2 }, { itemId: 'polished-beetle-eye', qty: 1 }],
+    result: { itemId: 'speed-potion', qty: 1 },
+  },
 ];
 
 export class CraftingSystem {

@@ -21,6 +21,7 @@ export class UIScene extends Phaser.Scene {
       equipment: { weapon: null, armor: null },
       location: 'town',
       inventory: [],
+      activeEffects: [],
     };
 
     this.showInventory = false;
@@ -382,10 +383,12 @@ export class UIScene extends Phaser.Scene {
     const panelX = width - barWidth - pad * 2 - safeRight;
     const panelY = safeTop;
 
-    // Background panel
+    // Background panel - expand if active effects are showing
+    const effectCount = (this.stats.activeEffects || []).length;
+    const panelHeight = 125 + effectCount * 11;
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
-      barWidth + pad * 3, 125,
+      barWidth + pad * 3, panelHeight,
       0x000000, 0.7
     ).setOrigin(0, 0);
     this.uiContainer.add(panelBg);
@@ -460,6 +463,24 @@ export class UIScene extends Phaser.Scene {
           stroke: '#000000', strokeThickness: 1,
         });
       this.uiContainer.add(this.potionText);
+    }
+
+    // Active status effects display
+    const effects = this.stats.activeEffects || [];
+    if (effects.length > 0) {
+      const effectY = (potionCount > 0 ? potionY + 12 : potionY);
+      let ey = effectY;
+      for (const eff of effects) {
+        const icon = eff.type === 'buff' ? '⬆' : '⬇';
+        const color = eff.type === 'buff' ? '#66aaff' : '#ff6644';
+        const effText = this.add.text(panelX, ey,
+          `${icon} ${eff.name} ${eff.remainingSec}s`, {
+            fontSize: '8px', fill: color, fontFamily: 'monospace',
+            stroke: '#000000', strokeThickness: 1,
+          });
+        this.uiContainer.add(effText);
+        ey += 11;
+      }
     }
 
     // ---- Bottom: Controls hint ----
@@ -849,6 +870,228 @@ export class UIScene extends Phaser.Scene {
 
       yOffset += 18;
     }
+  }
+
+  showMerchantPanel(inventory, levelSystem, floor) {
+    if (this._overlayPanel) this._destroyOverlayPanel();
+
+    const { width, height } = this.scale;
+    const panelW = Math.min(300, width * 0.5);
+    const panelH = Math.min(380, height * 0.65);
+    const panelX = width / 2 - panelW / 2;
+    const panelY = height / 2 - panelH / 2;
+
+    this._overlayPanel = this.add.container(0, 0).setDepth(500);
+
+    // Dim overlay
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.5)
+      .setOrigin(0, 0).setInteractive();
+    overlay.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(overlay);
+
+    // Panel background
+    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a1a2e, 0.95).setOrigin(0, 0).setInteractive();
+    const border = this.add.rectangle(panelX, panelY, panelW, panelH).setOrigin(0, 0);
+    border.setStrokeStyle(2, 0xffdd44);
+    this._overlayPanel.add([bg, border]);
+
+    // Title
+    const title = this.add.text(panelX + panelW / 2, panelY + 12, '🏪 Merchant', {
+      fontSize: '12px', fill: '#ffdd44', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5);
+    this._overlayPanel.add(title);
+
+    // Close button
+    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
+      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(1, 0).setInteractive();
+    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(closeBtn);
+
+    // Gold display
+    const goldText = this.add.text(panelX + 14, panelY + 30, `Your Gold: ${levelSystem.gold}g`, {
+      fontSize: '10px', fill: '#ffaa00', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    });
+    this._overlayPanel.add(goldText);
+
+    let yOffset = panelY + 48;
+
+    // Merchant stock: potions and consumables scaled by floor
+    const stock = [
+      { itemId: 'health-potion', price: 15 + floor * 2 },
+      { itemId: 'greater-health-potion', price: 35 + floor * 3 },
+      { itemId: 'strength-potion', price: 25 + floor * 2 },
+      { itemId: 'speed-potion', price: 25 + floor * 2 },
+    ];
+
+    const buyLabel = this.add.text(panelX + 10, yOffset, 'For Sale:', {
+      fontSize: '10px', fill: '#aaaaaa', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    });
+    this._overlayPanel.add(buyLabel);
+    yOffset += 16;
+
+    for (const item of stock) {
+      if (yOffset > panelY + panelH - 60) break;
+      const data = ITEM_DATA[item.itemId];
+      if (!data) continue;
+
+      const canBuy = levelSystem.gold >= item.price;
+      const nameColor = canBuy ? '#ffffff' : '#666666';
+
+      const nameText = this.add.text(panelX + 14, yOffset, `${data.name}`, {
+        fontSize: '9px', fill: nameColor, fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(nameText);
+
+      const priceColor = canBuy ? '#ffaa00' : '#884400';
+      const priceText = this.add.text(panelX + panelW - 80, yOffset, `${item.price}g`, {
+        fontSize: '9px', fill: priceColor, fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(priceText);
+
+      if (canBuy) {
+        const buyBtn = this.add.text(panelX + panelW - 14, yOffset, '[Buy]', {
+          fontSize: '8px', fill: '#44ff44', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        }).setOrigin(1, 0).setInteractive();
+        buyBtn.on('pointerdown', () => {
+          if (levelSystem.removeGold(item.price)) {
+            inventory.addItem(item.itemId, 1);
+            this.showMerchantPanel(inventory, levelSystem, floor);
+            this.refreshHUD();
+          }
+        });
+        this._overlayPanel.add(buyBtn);
+      }
+
+      // Description
+      const descText = this.add.text(panelX + 24, yOffset + 13, data.description, {
+        fontSize: '7px', fill: '#888888', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(descText);
+
+      yOffset += 30;
+    }
+
+    // Sell section
+    yOffset += 6;
+    const sellLabel = this.add.text(panelX + 10, yOffset, 'Sell Materials:', {
+      fontSize: '10px', fill: '#aaaaaa', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    });
+    this._overlayPanel.add(sellLabel);
+    yOffset += 16;
+
+    const sellableItems = inventory.getItems().filter(i => {
+      const d = ITEM_DATA[i.itemId];
+      return d && d.type === 'material' && i.quantity > 0;
+    });
+
+    if (sellableItems.length === 0) {
+      const noSell = this.add.text(panelX + 14, yOffset, 'No materials to sell', {
+        fontSize: '9px', fill: '#666666', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(noSell);
+    } else {
+      for (const item of sellableItems) {
+        if (yOffset > panelY + panelH - 20) break;
+        const data = ITEM_DATA[item.itemId];
+        const totalValue = data.sellPrice * item.quantity;
+
+        const itemText = this.add.text(panelX + 14, yOffset,
+          `${item.name} x${item.quantity} (${totalValue}g)`, {
+            fontSize: '9px', fill: '#dddddd', fontFamily: 'monospace',
+            stroke: '#000000', strokeThickness: 1,
+          });
+        this._overlayPanel.add(itemText);
+
+        const sellBtn = this.add.text(panelX + panelW - 14, yOffset, '[Sell All]', {
+          fontSize: '8px', fill: '#ffaa44', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        }).setOrigin(1, 0).setInteractive();
+        sellBtn.on('pointerdown', () => {
+          levelSystem.addGold(totalValue);
+          inventory.removeItem(item.itemId, item.quantity);
+          this.showMerchantPanel(inventory, levelSystem, floor);
+          this.refreshHUD();
+        });
+        this._overlayPanel.add(sellBtn);
+
+        yOffset += 16;
+      }
+    }
+  }
+
+  showDeathSummary(summary, goldLost) {
+    if (this._overlayPanel) this._destroyOverlayPanel();
+
+    const { width, height } = this.scale;
+    const panelW = Math.min(280, width * 0.45);
+    const panelH = Math.min(280, height * 0.5);
+    const panelX = width / 2 - panelW / 2;
+    const panelY = height / 2 - panelH / 2;
+
+    this._overlayPanel = this.add.container(0, 0).setDepth(500);
+
+    // Dim overlay
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
+      .setOrigin(0, 0);
+    this._overlayPanel.add(overlay);
+
+    // Panel background
+    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a0a0a, 0.95).setOrigin(0, 0);
+    const border = this.add.rectangle(panelX, panelY, panelW, panelH).setOrigin(0, 0);
+    border.setStrokeStyle(2, 0xff0000);
+    this._overlayPanel.add([bg, border]);
+
+    // Title
+    const title = this.add.text(panelX + panelW / 2, panelY + 14, '💀 Run Summary', {
+      fontSize: '13px', fill: '#ff4444', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5);
+    this._overlayPanel.add(title);
+
+    let yOffset = panelY + 38;
+    const stats = [
+      { label: 'Highest Floor', value: summary.highestFloor, color: '#ffffff' },
+      { label: 'Enemies Killed', value: summary.enemiesKilled, color: '#ff6644' },
+      { label: 'Rooms Cleared', value: summary.roomsCleared, color: '#44ff44' },
+      { label: 'Gold Earned', value: `${summary.goldEarned}g`, color: '#ffaa00' },
+      { label: 'Gold Lost', value: `-${goldLost}g`, color: '#ff4444' },
+      { label: 'Items Found', value: summary.itemsFound, color: '#66aaff' },
+      { label: 'Potions Used', value: summary.potionsUsed, color: '#44ff88' },
+      { label: 'Damage Dealt', value: summary.damageDealt, color: '#ffdd44' },
+      { label: 'Damage Taken', value: summary.damageTaken, color: '#ff8844' },
+    ];
+
+    for (const stat of stats) {
+      const labelText = this.add.text(panelX + 14, yOffset, stat.label, {
+        fontSize: '9px', fill: '#aaaaaa', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      const valueText = this.add.text(panelX + panelW - 14, yOffset, `${stat.value}`, {
+        fontSize: '9px', fill: stat.color, fontFamily: 'monospace',
+        fontStyle: 'bold', stroke: '#000000', strokeThickness: 1,
+      }).setOrigin(1, 0);
+      this._overlayPanel.add([labelText, valueText]);
+      yOffset += 16;
+    }
+
+    // Return message
+    const returnText = this.add.text(panelX + panelW / 2, panelY + panelH - 16,
+      'Returning to town...', {
+        fontSize: '8px', fill: '#888888', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      }).setOrigin(0.5);
+    this._overlayPanel.add(returnText);
   }
 
   _destroyOverlayPanel() {
