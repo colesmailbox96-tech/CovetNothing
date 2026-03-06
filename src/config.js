@@ -31,12 +31,17 @@ export const GAME_CONFIG = {
   BOSS_ROOM_INTERVAL: 5,     // boss room every N rooms on a floor
 
   // Threat-budget spawning
-  THREAT_BUDGET_BASE: 5,
-  THREAT_BUDGET_DEPTH_SCALE: 1.8,   // extra budget per floor
+  THREAT_BUDGET_BASE: 55,
+  THREAT_BUDGET_DEPTH_SCALE: 3.0,   // extra budget per floor
   THREAT_BUDGET_ELITE_BONUS: 4,
   THREAT_BUDGET_BOSS_BONUS: 8,
-  MAX_ENEMIES_PER_ROOM: 8,          // cap for mobile performance
-  WAVE_THRESHOLD: 2,                 // spawn next wave when remaining <= this
+  // Upper bound on concurrently active enemies in a single room.
+  // The value 30 is a balance between readability (screen clutter) and
+  // frame-time budget on our target low-end mobile devices and desktops.
+  // If target hardware or performance goals change, revisit this cap
+  // together with ThreatBudgetSpawner's spawning logic and documentation.
+  MAX_ENEMIES_PER_ROOM: 30,
+  WAVE_THRESHOLD: 5,                 // spawn next wave when remaining <= this
 
   // Room types: normal, elite, treasure, merchant, rest, boss
   ROOM_TYPES: ['normal', 'elite', 'treasure', 'merchant', 'rest', 'boss'],
