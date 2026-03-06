@@ -384,8 +384,9 @@ export class UIScene extends Phaser.Scene {
     const panelY = safeTop;
 
     // Background panel - expand if active effects are showing
+    const effectLineHeight = 11;
     const effectCount = (this.stats.activeEffects || []).length;
-    const panelHeight = 125 + effectCount * 11;
+    const panelHeight = 125 + effectCount * effectLineHeight;
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
       barWidth + pad * 3, panelHeight,
@@ -479,7 +480,7 @@ export class UIScene extends Phaser.Scene {
             stroke: '#000000', strokeThickness: 1,
           });
         this.uiContainer.add(effText);
-        ey += 11;
+        ey += effectLineHeight;
       }
     }
 

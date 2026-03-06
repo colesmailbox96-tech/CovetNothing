@@ -1215,7 +1215,7 @@ export class DungeonScene extends Phaser.Scene {
     if (this.player.hp >= this.player.getMaxHP()) {
       this.showPopup(this.player.x, this.player.y - 20, 'No potions!', '#aaaaaa');
     } else {
-      this.showPopup(this.player.x, this.player.y - 20, 'No potions!', '#ff6644');
+      this.showPopup(this.player.x, this.player.y - 20, 'No healing potions!', '#ff6644');
     }
   }
 
