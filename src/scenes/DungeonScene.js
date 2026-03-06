@@ -7,6 +7,9 @@ import { LootSystem } from '../systems/LootSystem.js';
 import { Player } from '../entities/Player.js';
 import { Enemy } from '../entities/Enemy.js';
 import { ENEMY_DATA } from '../data/enemies.js';
+import { EquipmentSystem } from '../systems/EquipmentSystem.js';
+import { CraftingSystem } from '../systems/CraftingSystem.js';
+import { ITEM_DATA } from '../data/items.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -17,6 +20,7 @@ export class DungeonScene extends Phaser.Scene {
     this.currentFloor = data.floor || 1;
     this.levelSystem = this.registry.get('levelSystem');
     this.inventory = this.registry.get('inventory');
+    this.equipmentSystem = this.registry.get('equipmentSystem');
   }
 
   create() {
@@ -53,6 +57,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // E key
     this.interactKey = this.input.keyboard.addKey('E');
+    this.potionKey = this.input.keyboard.addKey('Q');
 
     // Combat events
     this.events.on('playerAttack', this.handlePlayerAttack, this);
@@ -170,6 +175,34 @@ export class DungeonScene extends Phaser.Scene {
     g.fillStyle(0xccaa44, 1);
     g.fillRect(22, 1, 4, 4);
     g.generateTexture('tile-crafting-bench', ts, ts);
+    g.clear();
+
+    // Treasure chest
+    g.fillStyle(0x8a6a2a, 1);
+    g.fillRect(4, 8, ts - 8, ts - 12);
+    g.fillStyle(0xa47a3a, 1);
+    g.fillRect(4, 8, ts - 8, 6);
+    g.fillStyle(0x6a4a1a, 1);
+    g.fillRect(4, 14, ts - 8, 2);
+    g.fillStyle(0xccaa44, 1);
+    g.fillRect(ts / 2 - 3, 12, 6, 6);
+    g.lineStyle(1, 0x5a3a0a, 1);
+    g.strokeRect(4, 8, ts - 8, ts - 12);
+    g.generateTexture('tile-chest', ts, ts);
+    g.clear();
+
+    // Opened chest
+    g.fillStyle(0x6a4a1a, 1);
+    g.fillRect(4, 12, ts - 8, ts - 16);
+    g.fillStyle(0x8a6a2a, 1);
+    g.fillRect(4, 4, ts - 8, 10);
+    g.fillStyle(0x5a3a0a, 0.5);
+    g.fillRect(6, 14, ts - 12, ts - 20);
+    g.lineStyle(1, 0x5a3a0a, 1);
+    g.strokeRect(4, 4, ts - 8, ts - 8);
+    g.generateTexture('tile-chest-open', ts, ts);
+    g.clear();
+
     g.destroy();
   }
 
@@ -208,6 +241,14 @@ export class DungeonScene extends Phaser.Scene {
     this.craftingBenchPrompt = null;
     if (roomData.craftingBenchPos) {
       this._createCraftingBench(roomData.craftingBenchPos);
+    }
+
+    // Treasure chest
+    this.treasureChest = null;
+    this.treasureChestPrompt = null;
+    this.treasureChestOpened = false;
+    if (node.type === 'treasure' && !node.chestLooted) {
+      this._createTreasureChest(roomData);
     }
 
     // Doors
@@ -292,6 +333,10 @@ export class DungeonScene extends Phaser.Scene {
     // Crafting bench
     if (this.craftingBench) { this.craftingBench.destroy(); this.craftingBench = null; }
     if (this.craftingBenchPrompt) { this.craftingBenchPrompt.destroy(); this.craftingBenchPrompt = null; }
+
+    // Treasure chest
+    if (this.treasureChest) { this.treasureChest.destroy(); this.treasureChest = null; }
+    if (this.treasureChestPrompt) { this.treasureChestPrompt.destroy(); this.treasureChestPrompt = null; }
 
     // Wall visuals stored separately
     if (this._wallImages) {
@@ -533,6 +578,15 @@ export class DungeonScene extends Phaser.Scene {
     this.craftingBenchPrompt = null;
   }
 
+  _createTreasureChest(roomData) {
+    // Place in center of room
+    const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
+    this.treasureChest = this.add.image(cx, cy, 'tile-chest').setDepth(2);
+    this.treasureChestPrompt = null;
+    this.treasureChestOpened = false;
+  }
+
   goToNextFloor() {
     this.scene.restart({ floor: this.currentFloor + 1 });
   }
@@ -745,18 +799,44 @@ export class DungeonScene extends Phaser.Scene {
         if (!this.craftingBenchPrompt) {
           this.craftingBenchPrompt = this.add.text(
             this.craftingBench.x, this.craftingBench.y - 20,
-            this._interactHint('Craft') + ' (coming soon)',
+            this._interactHint('Craft'),
             { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
           ).setOrigin(0.5).setDepth(20);
         }
         if (justPressedE && !nearDoor) {
-          this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
-            'Crafting recipes coming soon!', '#ffdd44');
+          const uiScene = this.scene.get('UIScene');
+          if (uiScene) {
+            uiScene.showCraftingPanel(this.inventory);
+          }
         }
       } else if (this.craftingBenchPrompt) {
         this.craftingBenchPrompt.destroy();
         this.craftingBenchPrompt = null;
+      }
+    }
+
+    // Treasure chest
+    if (this.treasureChest && !this.treasureChestOpened) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.treasureChest.x, this.treasureChest.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        if (!this.treasureChestPrompt) {
+          this.treasureChestPrompt = this.add.text(
+            this.treasureChest.x, this.treasureChest.y - 20,
+            this._interactHint('Open'),
+            { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2 }
+          ).setOrigin(0.5).setDepth(20);
+        }
+        if (justPressedE && !nearDoor) {
+          this._openTreasureChest();
+        }
+      } else if (this.treasureChestPrompt) {
+        this.treasureChestPrompt.destroy();
+        this.treasureChestPrompt = null;
       }
     }
 
@@ -814,8 +894,21 @@ export class DungeonScene extends Phaser.Scene {
         this.craftingBench.x, this.craftingBench.y
       );
       if (dist < this.tileSize * 1.5) {
-        this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
-          'Crafting recipes coming soon!', '#ffdd44');
+        const uiScene = this.scene.get('UIScene');
+        if (uiScene) {
+          uiScene.showCraftingPanel(this.inventory);
+        }
+        return;
+      }
+    }
+
+    if (this.treasureChest && !this.treasureChestOpened) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.treasureChest.x, this.treasureChest.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        this._openTreasureChest();
         return;
       }
     }
@@ -829,6 +922,69 @@ export class DungeonScene extends Phaser.Scene {
         this.goToNextFloor();
       }
     }
+  }
+
+  _openTreasureChest() {
+    if (this.treasureChestOpened) return;
+    this.treasureChestOpened = true;
+
+    // Mark as looted on the graph node
+    const node = this.graph.rooms[this.currentRoomId];
+    node.chestLooted = true;
+
+    // Visual change
+    this.treasureChest.setTexture('tile-chest-open');
+    if (this.treasureChestPrompt) {
+      this.treasureChestPrompt.destroy();
+      this.treasureChestPrompt = null;
+    }
+
+    // Generate loot
+    const loot = LootSystem.rollTreasureChest(this.currentFloor);
+    let popupY = this.treasureChest.y - 20;
+
+    for (const entry of loot) {
+      if (entry.type === 'gold') {
+        this.levelSystem.addGold(entry.amount);
+        this.showPopup(this.treasureChest.x, popupY, `+${entry.amount}g`, '#ffdd44');
+      } else if (entry.type === 'item') {
+        this.inventory.addItem(entry.itemId, entry.quantity);
+        const itemData = ITEM_DATA[entry.itemId];
+        const name = itemData ? itemData.name : entry.itemId;
+        this.showPopup(this.treasureChest.x, popupY, `+${name}${entry.quantity > 1 ? ' x' + entry.quantity : ''}`, '#ffffff');
+      }
+      popupY -= 18;
+    }
+
+    this.updateUI();
+  }
+
+  _usePotion() {
+    if (!this.player || !this.player.active) return;
+    if (this.player.hp >= this.player.getMaxHP()) {
+      this.showPopup(this.player.x, this.player.y - 20, 'Already at full HP!', '#aaaaaa');
+      return;
+    }
+
+    // Try greater potion first, then regular
+    let potionId = null;
+    if (this.inventory.items['greater-health-potion'] > 0) {
+      potionId = 'greater-health-potion';
+    } else if (this.inventory.items['health-potion'] > 0) {
+      potionId = 'health-potion';
+    }
+
+    if (!potionId) {
+      this.showPopup(this.player.x, this.player.y - 20, 'No potions!', '#ff6644');
+      return;
+    }
+
+    const itemData = ITEM_DATA[potionId];
+    this.inventory.removeItem(potionId, 1);
+    const healAmount = itemData.effect.heal;
+    this.player.heal(healAmount);
+    this.showPopup(this.player.x, this.player.y - 20, `+${healAmount} HP`, '#44ff44');
+    this.updateUI();
   }
 
   // ===================== COMBAT EVENTS =====================
@@ -912,6 +1068,11 @@ export class DungeonScene extends Phaser.Scene {
       gold: this.levelSystem.gold,
       floor: this.currentFloor,
       attack: this.levelSystem.getAttack(),
+      defense: this.levelSystem.getDefense(),
+      equipment: {
+        weapon: this.equipmentSystem ? this.equipmentSystem.getEquipped('weapon') : null,
+        armor: this.equipmentSystem ? this.equipmentSystem.getEquipped('armor') : null,
+      },
       location: 'dungeon',
       inventory: this.inventory.getItems(),
     });
@@ -938,6 +1099,11 @@ export class DungeonScene extends Phaser.Scene {
       this.player.update(time, delta);
       this.checkInteractions();
       this.updateUI();
+
+      // Use potion with Q key
+      if (Phaser.Input.Keyboard.JustDown(this.potionKey)) {
+        this._usePotion();
+      }
 
       // Auto-attack
       if (this.player.autoRetaliateTimer > 0 && !this.player.isAttacking && this.player.attackCooldown <= 0) {

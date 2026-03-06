@@ -4,6 +4,8 @@ import { Player } from '../entities/Player.js';
 import { ITEM_DATA } from '../data/items.js';
 import { LevelSystem } from '../systems/LevelSystem.js';
 import { Inventory } from '../systems/LootSystem.js';
+import { EquipmentSystem } from '../systems/EquipmentSystem.js';
+import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -11,15 +13,26 @@ export class TownScene extends Phaser.Scene {
   }
 
   init() {
+    this.equipmentSystem = this.registry.get('equipmentSystem');
+    if (!this.equipmentSystem) {
+      this.equipmentSystem = new EquipmentSystem();
+      this.registry.set('equipmentSystem', this.equipmentSystem);
+    }
+
     this.levelSystem = this.registry.get('levelSystem');
     this.inventory = this.registry.get('inventory');
 
     // Initialize systems if first load
     if (!this.levelSystem) {
-      this.levelSystem = new LevelSystem();
+      this.levelSystem = new LevelSystem(this.equipmentSystem);
       this.inventory = new Inventory();
       this.registry.set('levelSystem', this.levelSystem);
       this.registry.set('inventory', this.inventory);
+    }
+
+    // Link equipment to a levelSystem that was created before this system existed
+    if (!this.levelSystem.equipmentSystem) {
+      this.levelSystem.equipmentSystem = this.equipmentSystem;
     }
   }
 
@@ -206,14 +219,14 @@ export class TownScene extends Phaser.Scene {
     const smithX = 15.5 * ts + ts / 2;
     const smithY = 5.5 * ts + ts / 2;
     this.createNPCMarker(smithX, smithY, 'Blacksmith', 0xff6600, () => {
-      this.showPopup(smithX, smithY - 20, 'Coming soon...', '#aaaaaa');
+      this.openBlacksmith();
     });
 
     // Crafting NPC
     const craftX = 3.5 * ts + ts / 2;
     const craftY = 9.5 * ts + ts / 2;
     this.createNPCMarker(craftX, craftY, 'Crafting', 0x66aaff, () => {
-      this.showPopup(craftX, craftY - 20, 'Coming soon...', '#aaaaaa');
+      this.openCrafting();
     });
   }
 
@@ -280,6 +293,20 @@ export class TownScene extends Phaser.Scene {
     this.dungeonEntrance = { x, y };
   }
 
+  openBlacksmith() {
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene) {
+      uiScene.showEquipmentPanel(this.inventory, this.equipmentSystem);
+    }
+  }
+
+  openCrafting() {
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene) {
+      uiScene.showCraftingPanel(this.inventory);
+    }
+  }
+
   openShop() {
     // Simple sell interface via UI
     const items = this.inventory.getItems();
@@ -332,6 +359,11 @@ export class TownScene extends Phaser.Scene {
         gold: this.levelSystem.gold,
         floor: 0,
         attack: this.levelSystem.getAttack(),
+        defense: this.levelSystem.getDefense(),
+        equipment: {
+          weapon: this.equipmentSystem ? this.equipmentSystem.getEquipped('weapon') : null,
+          armor: this.equipmentSystem ? this.equipmentSystem.getEquipped('armor') : null,
+        },
         location: 'town',
         inventory: this.inventory.getItems(),
       });

@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { getDirection } from '../config.js';
+import { ITEM_DATA } from '../data/items.js';
+import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 
 const JOYSTICK_DEAD_ZONE = 0.15;
 const SWIPE_THRESHOLD = 30;     // min px to count as a swipe
@@ -15,6 +17,8 @@ export class UIScene extends Phaser.Scene {
       hp: 100, maxHp: 100,
       level: 1, exp: 0, expNext: 100,
       gold: 0, floor: 0, attack: 15,
+      defense: 0,
+      equipment: { weapon: null, armor: null },
       location: 'town',
       inventory: [],
     };
@@ -258,6 +262,11 @@ export class UIScene extends Phaser.Scene {
       this.showInventory = !this.showInventory;
       this.refreshHUD();
     });
+
+    // Potion button (above interact)
+    this.createTouchButton(rightX - btnRadius * 2 - pad, bottomY - btnRadius * 2 - pad, btnRadius * 0.8, '🧪', 0x44ff88, () => {
+      this.emitTouchAction('potion');
+    });
   }
 
   createTouchButton(x, y, radius, label, color, callback) {
@@ -313,6 +322,11 @@ export class UIScene extends Phaser.Scene {
         if (townScene && townScene.scene.isActive()) {
           townScene.handleTouchInteract();
         }
+      }
+    } else if (action === 'potion') {
+      const dungeonScene = this.scene.get('DungeonScene');
+      if (dungeonScene && dungeonScene.scene.isActive() && dungeonScene._usePotion) {
+        dungeonScene._usePotion();
       }
     }
   }
@@ -371,7 +385,7 @@ export class UIScene extends Phaser.Scene {
     // Background panel
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
-      barWidth + pad * 3, 105,
+      barWidth + pad * 3, 125,
       0x000000, 0.7
     ).setOrigin(0, 0);
     this.uiContainer.add(panelBg);
@@ -411,7 +425,7 @@ export class UIScene extends Phaser.Scene {
     // Level, Gold, Attack text
     const statsY = expY + barHeight + 6;
     this.levelText = this.add.text(panelX, statsY,
-      `Lv: ${this.stats.level}  ATK: ${this.stats.attack}`, {
+      `Lv: ${this.stats.level}  ATK: ${this.stats.attack}  DEF: ${this.stats.defense}`, {
         fontSize: smallFont, fill: '#ffdd44', fontFamily: 'monospace',
         stroke: '#000000', strokeThickness: 1,
       });
@@ -425,11 +439,34 @@ export class UIScene extends Phaser.Scene {
       });
     this.uiContainer.add(this.goldText);
 
+    const equipY = goldY + 14;
+    const weaponName = (this.stats.equipment && this.stats.equipment.weapon && this.stats.equipment.weapon.name) || 'None';
+    const armorName = (this.stats.equipment && this.stats.equipment.armor && this.stats.equipment.armor.name) || 'None';
+    this.equipText = this.add.text(panelX, equipY,
+      `⚔${weaponName}  🛡${armorName}`, {
+        fontSize: '8px', fill: '#aaccff', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+    this.uiContainer.add(this.equipText);
+
+    const potionY = equipY + 12;
+    const potionCount = (this.stats.inventory || [])
+      .filter(i => ITEM_DATA[i.itemId] && ITEM_DATA[i.itemId].type === 'consumable')
+      .reduce((sum, i) => sum + i.quantity, 0);
+    if (potionCount > 0) {
+      this.potionText = this.add.text(panelX, potionY,
+        `🧪 Potions: ${potionCount} (Q)`, {
+          fontSize: '8px', fill: '#44ff88', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        });
+      this.uiContainer.add(this.potionText);
+    }
+
     // ---- Bottom: Controls hint ----
     const controlsY = height - Math.max(20, this.safeArea.bottom + 8);
     const controlsText = this.isTouchDevice
       ? ''
-      : 'WASD: Move | SPACE: Attack | E: Interact | I: Inventory';
+      : 'WASD: Move | SPACE: Attack | E: Interact | Q: Potion | I: Inventory';
     if (controlsText) {
       this.controlsHint = this.add.text(width / 2, controlsY, controlsText, {
         fontSize: '9px', fill: '#888888', fontFamily: 'monospace',
@@ -589,6 +626,235 @@ export class UIScene extends Phaser.Scene {
 
         yOffset += 20;
       }
+    }
+  }
+
+  showEquipmentPanel(inventory, equipmentSystem) {
+    if (this._overlayPanel) this._destroyOverlayPanel();
+
+    const { width, height } = this.scale;
+    const panelW = Math.min(300, width * 0.5);
+    const panelH = Math.min(360, height * 0.6);
+    const panelX = width / 2 - panelW / 2;
+    const panelY = height / 2 - panelH / 2;
+
+    this._overlayPanel = this.add.container(0, 0).setDepth(500);
+
+    // Dim overlay
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.5)
+      .setOrigin(0, 0).setInteractive();
+    overlay.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(overlay);
+
+    // Panel background
+    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a1a2e, 0.95).setOrigin(0, 0).setInteractive();
+    const border = this.add.rectangle(panelX, panelY, panelW, panelH).setOrigin(0, 0);
+    border.setStrokeStyle(2, 0xff6600);
+    this._overlayPanel.add([bg, border]);
+
+    // Title
+    const title = this.add.text(panelX + panelW / 2, panelY + 12, '🔨 Blacksmith', {
+      fontSize: '12px', fill: '#ff9944', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5);
+    this._overlayPanel.add(title);
+
+    // Close button
+    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
+      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(1, 0).setInteractive();
+    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(closeBtn);
+
+    let yOffset = panelY + 32;
+
+    // Current equipment
+    const eqLabel = this.add.text(panelX + 10, yOffset, 'Equipped:', {
+      fontSize: '10px', fill: '#aaaaaa', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    });
+    this._overlayPanel.add(eqLabel);
+    yOffset += 16;
+
+    for (const slot of ['weapon', 'armor']) {
+      const equipped = equipmentSystem.getEquipped(slot);
+      const slotLabel = slot === 'weapon' ? '⚔ Weapon' : '🛡 Armor';
+      const itemName = equipped ? equipped.name : 'Empty';
+      const color = equipped ? '#ffffff' : '#666666';
+
+      const slotText = this.add.text(panelX + 14, yOffset, `${slotLabel}: ${itemName}`, {
+        fontSize: '9px', fill: color, fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(slotText);
+
+      if (equipped) {
+        // Unequip button
+        const unBtn = this.add.text(panelX + panelW - 14, yOffset, '[Unequip]', {
+          fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        }).setOrigin(1, 0).setInteractive();
+        unBtn.on('pointerdown', () => {
+          const removed = equipmentSystem.unequip(slot);
+          if (removed) inventory.addItem(removed, 1);
+          this.showEquipmentPanel(inventory, equipmentSystem);
+          this.refreshHUD();
+        });
+        this._overlayPanel.add(unBtn);
+      }
+      yOffset += 16;
+    }
+
+    // Available equipment in inventory
+    yOffset += 8;
+    const availLabel = this.add.text(panelX + 10, yOffset, 'Available Equipment:', {
+      fontSize: '10px', fill: '#aaaaaa', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    });
+    this._overlayPanel.add(availLabel);
+    yOffset += 16;
+
+    const items = inventory.getItems();
+    const equipItems = items.filter(i => {
+      const data = ITEM_DATA[i.itemId];
+      return data && (data.type === 'weapon' || data.type === 'armor');
+    });
+
+    if (equipItems.length === 0) {
+      const noItems = this.add.text(panelX + 14, yOffset, 'No equipment in inventory', {
+        fontSize: '9px', fill: '#666666', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(noItems);
+    } else {
+      for (const item of equipItems) {
+        if (yOffset > panelY + panelH - 30) break;
+        const data = ITEM_DATA[item.itemId];
+        const statsStr = data.stats
+          ? Object.entries(data.stats).map(([k, v]) => `+${v} ${k}`).join(' ')
+          : '';
+
+        const itemText = this.add.text(panelX + 14, yOffset, `${item.name} (${statsStr})`, {
+          fontSize: '9px', fill: '#dddddd', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        });
+        this._overlayPanel.add(itemText);
+
+        const equipBtn = this.add.text(panelX + panelW - 14, yOffset, '[Equip]', {
+          fontSize: '8px', fill: '#44ff44', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        }).setOrigin(1, 0).setInteractive();
+        equipBtn.on('pointerdown', () => {
+          // Remove from inventory
+          inventory.removeItem(item.itemId, 1);
+          // Equip (returns previously equipped item, if any)
+          const prev = equipmentSystem.equip(item.itemId);
+          if (prev) inventory.addItem(prev, 1);
+          this.showEquipmentPanel(inventory, equipmentSystem);
+          this.refreshHUD();
+        });
+        this._overlayPanel.add(equipBtn);
+
+        yOffset += 16;
+      }
+    }
+  }
+
+  showCraftingPanel(inventory) {
+    if (this._overlayPanel) this._destroyOverlayPanel();
+
+    const { width, height } = this.scale;
+    const panelW = Math.min(320, width * 0.55);
+    const panelH = Math.min(400, height * 0.65);
+    const panelX = width / 2 - panelW / 2;
+    const panelY = height / 2 - panelH / 2;
+
+    this._overlayPanel = this.add.container(0, 0).setDepth(500);
+
+    // Dim overlay
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.5)
+      .setOrigin(0, 0).setInteractive();
+    overlay.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(overlay);
+
+    // Panel
+    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a1a2e, 0.95).setOrigin(0, 0).setInteractive();
+    const border = this.add.rectangle(panelX, panelY, panelW, panelH).setOrigin(0, 0);
+    border.setStrokeStyle(2, 0x66aaff);
+    this._overlayPanel.add([bg, border]);
+
+    // Title
+    const title = this.add.text(panelX + panelW / 2, panelY + 12, '🔧 Crafting', {
+      fontSize: '12px', fill: '#66aaff', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5);
+    this._overlayPanel.add(title);
+
+    // Close button
+    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
+      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(1, 0).setInteractive();
+    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add(closeBtn);
+
+    let yOffset = panelY + 32;
+
+    // List recipes
+    const recipeList = CraftingSystem.getAvailableRecipes(inventory);
+
+    for (const { recipe, canCraft } of recipeList) {
+      if (yOffset > panelY + panelH - 30) break;
+
+      const resultData = ITEM_DATA[recipe.result.itemId];
+      const nameColor = canCraft ? '#ffffff' : '#666666';
+
+      // Recipe name
+      const nameText = this.add.text(panelX + 14, yOffset, recipe.name, {
+        fontSize: '10px', fill: nameColor, fontFamily: 'monospace',
+        fontStyle: 'bold', stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(nameText);
+
+      // Craft button
+      if (canCraft) {
+        const craftBtn = this.add.text(panelX + panelW - 14, yOffset, '[Craft]', {
+          fontSize: '9px', fill: '#44ff44', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        }).setOrigin(1, 0).setInteractive();
+        craftBtn.on('pointerdown', () => {
+          CraftingSystem.craft(recipe, inventory);
+          this.showCraftingPanel(inventory);
+          this.refreshHUD();
+        });
+        this._overlayPanel.add(craftBtn);
+      }
+
+      yOffset += 14;
+
+      // Ingredients
+      const ingStr = recipe.ingredients.map(ing => {
+        const ingData = ITEM_DATA[ing.itemId];
+        const have = inventory.items[ing.itemId] || 0;
+        const color = have >= ing.qty ? '#44ff44' : '#ff4444';
+        return `${ingData ? ingData.name : ing.itemId}: ${have}/${ing.qty}`;
+      }).join(', ');
+
+      const ingText = this.add.text(panelX + 24, yOffset, ingStr, {
+        fontSize: '8px', fill: '#aaaaaa', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this._overlayPanel.add(ingText);
+
+      yOffset += 18;
+    }
+  }
+
+  _destroyOverlayPanel() {
+    if (this._overlayPanel) {
+      this._overlayPanel.destroy();
+      this._overlayPanel = null;
     }
   }
 

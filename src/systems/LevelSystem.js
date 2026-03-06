@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config.js';
 
 export class LevelSystem {
-  constructor() {
+  constructor(equipmentSystem = null) {
     this.level = 1;
     this.exp = 0;
     this.gold = 0;
+    this.equipmentSystem = equipmentSystem;
   }
 
   getExpForNextLevel() {
@@ -36,11 +37,17 @@ export class LevelSystem {
   }
 
   getMaxHP() {
-    return GAME_CONFIG.PLAYER_BASE_HP + (this.level - 1) * GAME_CONFIG.PLAYER_HP_PER_LEVEL;
+    const base = GAME_CONFIG.PLAYER_BASE_HP + (this.level - 1) * GAME_CONFIG.PLAYER_HP_PER_LEVEL;
+    return base + (this.equipmentSystem ? this.equipmentSystem.getBonusMaxHP() : 0);
   }
 
   getAttack() {
-    return GAME_CONFIG.PLAYER_BASE_ATTACK + (this.level - 1) * GAME_CONFIG.PLAYER_ATTACK_PER_LEVEL;
+    const base = GAME_CONFIG.PLAYER_BASE_ATTACK + (this.level - 1) * GAME_CONFIG.PLAYER_ATTACK_PER_LEVEL;
+    return base + (this.equipmentSystem ? this.equipmentSystem.getBonusAttack() : 0);
+  }
+
+  getDefense() {
+    return this.equipmentSystem ? this.equipmentSystem.getBonusDefense() : 0;
   }
 
   getScaledGold(baseMin, baseMax, floor) {
