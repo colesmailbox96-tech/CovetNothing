@@ -786,13 +786,11 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
-  /** Return a touch-aware interaction prompt (e.g. "Tap to Open" vs "Press E to open") */
+  /** Return a touch-aware interaction prompt (e.g. "Tap to open" vs "Press E to open") */
   _interactHint(action) {
+    const label = action.toLowerCase();
     const ui = this.scene.get('UIScene');
-    if (ui && ui.isTouchDevice) {
-      return `Tap to ${action.toLowerCase()}`;
-    }
-    return `Press E to ${action.toLowerCase()}`;
+    return (ui && ui.isTouchDevice) ? `Tap to ${label}` : `Press E to ${label}`;
   }
 
   /** Called from UIScene when the touch E button is pressed */

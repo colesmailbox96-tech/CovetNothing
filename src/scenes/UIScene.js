@@ -91,34 +91,26 @@ export class UIScene extends Phaser.Scene {
 
   /** Read iOS/Android safe area insets from CSS env() variables */
   _readSafeAreaInsets() {
-    const el = document.documentElement;
-    const get = (prop) => {
-      const val = getComputedStyle(el).getPropertyValue(prop);
-      return parseInt(val, 10) || 0;
-    };
+    // Use a temp element positioned at safe area boundaries to measure insets.
+    // CSS env() values can only be resolved in CSS context, not via getComputedStyle directly.
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;top:env(safe-area-inset-top);right:env(safe-area-inset-right);bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);pointer-events:none;visibility:hidden;';
+    document.body.appendChild(div);
+    const rect = div.getBoundingClientRect();
+    const winH = window.innerHeight;
+    const winW = window.innerWidth;
     this.safeArea = {
-      top: get('--sat') || get('env(safe-area-inset-top)'),
-      right: get('--sar') || get('env(safe-area-inset-right)'),
-      bottom: get('--sab') || get('env(safe-area-inset-bottom)'),
-      left: get('--sal') || get('env(safe-area-inset-left)'),
+      top: Math.max(0, rect.top),
+      bottom: Math.max(0, winH - rect.bottom),
+      left: Math.max(0, rect.left),
+      right: Math.max(0, winW - rect.right),
     };
-    // Fallback: use CSS env() directly via a temp element
-    if (this.safeArea.top === 0 && this.safeArea.bottom === 0) {
-      const div = document.createElement('div');
-      div.style.cssText = 'position:fixed;top:env(safe-area-inset-top);right:env(safe-area-inset-right);bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);pointer-events:none;visibility:hidden;';
-      document.body.appendChild(div);
-      const rect = div.getBoundingClientRect();
-      const winH = window.innerHeight;
-      const winW = window.innerWidth;
-      this.safeArea.top = Math.max(0, rect.top);
-      this.safeArea.bottom = Math.max(0, winH - rect.bottom);
-      this.safeArea.left = Math.max(0, rect.left);
-      this.safeArea.right = Math.max(0, winW - rect.right);
-      document.body.removeChild(div);
-    }
+    document.body.removeChild(div);
   }
 
-  /** Trigger haptic feedback (short vibration) if available */
+  /** Trigger haptic feedback (short vibration) if available.
+   *  Note: navigator.vibrate is not supported on iOS Safari; the guard
+   *  ensures this is a no-op on unsupported platforms. */
   static haptic(ms = 15) {
     if (navigator.vibrate) {
       navigator.vibrate(ms);
