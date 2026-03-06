@@ -23,7 +23,7 @@ export class ThreatBudgetSpawner {
     const base = GAME_CONFIG.THREAT_BUDGET_BASE;
     const depthScaling = Math.floor(floor * GAME_CONFIG.THREAT_BUDGET_DEPTH_SCALE);
     const tierBonus = roomType === 'elite' ? GAME_CONFIG.THREAT_BUDGET_ELITE_BONUS
-                    : roomType === 'boss'  ? GAME_CONFIG.THREAT_BUDGET_ELITE_BONUS * 2
+                    : roomType === 'boss'  ? GAME_CONFIG.THREAT_BUDGET_BOSS_BONUS
                     : 0;
 
     const budget = base + depthScaling + tierBonus;
