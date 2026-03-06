@@ -393,4 +393,35 @@ export class TownScene extends Phaser.Scene {
       }
     }
   }
+
+  /** Called from UIScene when the touch E button is pressed */
+  handleTouchInteract() {
+    if (!this.player || !this.player.active) return;
+
+    // Check dungeon entrance
+    if (this.dungeonZone) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.dungeonEntrance.x, this.dungeonEntrance.y
+      );
+      if (dist < 30) {
+        this.scene.start('DungeonScene', { floor: 1 });
+        return;
+      }
+    }
+
+    // Check NPC interactions
+    if (this.npcZones) {
+      for (const zone of this.npcZones) {
+        const dist = Phaser.Math.Distance.Between(
+          this.player.x, this.player.y,
+          zone.x, zone.y
+        );
+        if (dist < 30 && zone.npcCallback) {
+          zone.npcCallback();
+          return;
+        }
+      }
+    }
+  }
 }
