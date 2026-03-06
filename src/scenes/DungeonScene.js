@@ -713,7 +713,7 @@ export class DungeonScene extends Phaser.Scene {
       if (dist < this.tileSize * 1.5) {
         if (door.state === 'closed') {
           if (!door.prompt) {
-            door.prompt = this.add.text(dwx, dwy - 20, 'Press E to open', {
+            door.prompt = this.add.text(dwx, dwy - 20, this._interactHint('Open'), {
               fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2,
             }).setOrigin(0.5).setDepth(20);
@@ -745,7 +745,7 @@ export class DungeonScene extends Phaser.Scene {
         if (!this.craftingBenchPrompt) {
           this.craftingBenchPrompt = this.add.text(
             this.craftingBench.x, this.craftingBench.y - 20,
-            'Press E to craft (coming soon)',
+            this._interactHint('Craft') + ' (coming soon)',
             { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
           ).setOrigin(0.5).setDepth(20);
@@ -772,7 +772,7 @@ export class DungeonScene extends Phaser.Scene {
     );
     if (dist < this.tileSize) {
       if (!this.stairsPrompt) {
-        this.stairsPrompt = this.add.text(this.stairs.x, this.stairs.y - 20, 'Press E to descend', {
+        this.stairsPrompt = this.add.text(this.stairs.x, this.stairs.y - 20, this._interactHint('Descend'), {
           fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 2,
         }).setOrigin(0.5).setDepth(20);
@@ -784,6 +784,15 @@ export class DungeonScene extends Phaser.Scene {
       this.stairsPrompt.destroy();
       this.stairsPrompt = null;
     }
+  }
+
+  /** Return a touch-aware interaction prompt (e.g. "Tap to Open" vs "Press E to open") */
+  _interactHint(action) {
+    const ui = this.scene.get('UIScene');
+    if (ui && ui.isTouchDevice) {
+      return `Tap to ${action.toLowerCase()}`;
+    }
+    return `Press E to ${action.toLowerCase()}`;
   }
 
   /** Called from UIScene when the touch E button is pressed */
