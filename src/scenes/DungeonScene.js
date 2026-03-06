@@ -811,6 +811,51 @@ export class DungeonScene extends Phaser.Scene {
     this.scene.restart({ floor: this.currentFloor + 1 });
   }
 
+  /** Called from UIScene when the touch E button is pressed */
+  handleTouchInteract() {
+    if (!this.player || !this.player.active) return;
+
+    // Check doors
+    for (const door of this.doors) {
+      if (door.state !== 'closed') continue;
+
+      const doorWorldX = door.tileX * this.tileSize + this.tileSize / 2;
+      const doorWorldY = door.tileY * this.tileSize + this.tileSize / 2;
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y, doorWorldX, doorWorldY
+      );
+
+      if (dist < this.tileSize * 1.5) {
+        this.openDoor(door);
+        return;
+      }
+    }
+
+    // Check crafting bench
+    if (this.craftingBench) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.craftingBench.x, this.craftingBench.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
+          'Crafting recipes coming soon!', '#ffdd44');
+        return;
+      }
+    }
+
+    // Check stairs
+    if (this.stairs && this.stairs.visible) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.stairs.x, this.stairs.y
+      );
+      if (dist < this.tileSize) {
+        this.goToNextFloor();
+      }
+    }
+  }
+
   updateMinimap() {
     if (!this.minimapPlayerDot || !this.player) return;
     const tileX = Math.floor(this.player.x / this.tileSize);

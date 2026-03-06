@@ -16,6 +16,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invulnerableTimer = 0;
     this.autoRetaliateTimer = 0;
 
+    // Touch joystick input (set by UIScene)
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
+
     // Set up physics body
     this.setScale(0.5);
     this.body.setSize(40, 40);
@@ -31,11 +35,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
     this.attackKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-    // Touch/click attack
-    scene.input.on('pointerdown', () => {
-      this.tryAttack();
-    });
   }
 
   getMaxHP() {
@@ -155,6 +154,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     else if (this.cursors.right.isDown || this.wasd.right.isDown) vx = 1;
     if (this.cursors.up.isDown || this.wasd.up.isDown) vy = -1;
     else if (this.cursors.down.isDown || this.wasd.down.isDown) vy = 1;
+
+    // Apply touch joystick input
+    if (vx === 0 && vy === 0 && (this.touchMoveX !== 0 || this.touchMoveY !== 0)) {
+      vx = this.touchMoveX;
+      vy = this.touchMoveY;
+    }
 
     // Attack with space (allowed while moving)
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {

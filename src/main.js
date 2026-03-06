@@ -15,6 +15,10 @@ const config = {
     width: 800,
     height: 600,
   },
+  input: {
+    activePointers: 3,
+    touch: { capture: true },
+  },
   physics: {
     default: 'arcade',
     arcade: {

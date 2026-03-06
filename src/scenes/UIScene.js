@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 
+const JOYSTICK_DEAD_ZONE = 0.15;
+
 export class UIScene extends Phaser.Scene {
   constructor() {
     super('UIScene');
@@ -15,9 +17,22 @@ export class UIScene extends Phaser.Scene {
     };
 
     this.showInventory = false;
+    // Detect touch-primary devices (mobile/tablet) using coarse pointer check
+    // to avoid showing touch controls on desktop touchscreen laptops
+    const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const hasTouchAPI = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    this.isTouchDevice = hasCoarsePointer && hasTouchAPI;
+
+    // Touch input state (joystick vector, shared with Player via registry)
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
+    this.joystickPointerId = -1;
 
     // Create UI elements
     this.createHUD();
+    if (this.isTouchDevice) {
+      this.createTouchControls();
+    }
 
     // Listen for stat updates from game scenes
     this.events.on('updateStats', (data) => {
@@ -34,7 +49,190 @@ export class UIScene extends Phaser.Scene {
     // Handle resize
     this.scale.on('resize', () => {
       this.createHUD();
+      if (this.isTouchDevice) {
+        this.createTouchControls();
+      }
     });
+  }
+
+  /** Get the player from the currently active game scene */
+  getActivePlayer() {
+    const dungeonScene = this.scene.get('DungeonScene');
+    if (dungeonScene && dungeonScene.scene.isActive() && dungeonScene.player) {
+      return dungeonScene.player;
+    }
+    const townScene = this.scene.get('TownScene');
+    if (townScene && townScene.scene.isActive() && townScene.player) {
+      return townScene.player;
+    }
+    return null;
+  }
+
+  /** Push joystick vector to the active game scene's player */
+  syncTouchInput() {
+    const player = this.getActivePlayer();
+    if (player) {
+      player.touchMoveX = this.touchMoveX;
+      player.touchMoveY = this.touchMoveY;
+    }
+  }
+
+  // ---- Touch controls (virtual joystick + action buttons) ----
+  createTouchControls() {
+    if (this.touchContainer) this.touchContainer.destroy();
+    this.touchContainer = this.add.container(0, 0).setDepth(300).setScrollFactor(0);
+
+    const { width, height } = this.scale;
+    const safeBottom = height - 20; // Account for safe area insets
+
+    this.createVirtualJoystick(width, safeBottom);
+    this.createActionButtons(width, safeBottom);
+  }
+
+  createVirtualJoystick(screenW, safeBottom) {
+    const radius = Math.min(50, screenW * 0.08);
+    const knobRadius = radius * 0.45;
+    const cx = radius + 30;
+    const cy = safeBottom - radius - 20;
+
+    // Base circle
+    const base = this.add.circle(cx, cy, radius, 0xffffff, 0.15);
+    base.setStrokeStyle(2, 0xffffff, 0.3);
+    this.touchContainer.add(base);
+
+    // Knob
+    const knob = this.add.circle(cx, cy, knobRadius, 0xffffff, 0.35);
+    this.touchContainer.add(knob);
+
+    // Store joystick state
+    this.joyBase = { x: cx, y: cy, radius };
+    this.joyKnob = knob;
+
+    // Make the base interactive with a larger hit area for easier use
+    const hitSize = radius * 2.5;
+    const hitZone = this.add.zone(cx, cy, hitSize, hitSize).setInteractive();
+    this.touchContainer.add(hitZone);
+
+    hitZone.on('pointerdown', (pointer) => {
+      this.joystickPointerId = pointer.id;
+      this.updateJoystick(pointer);
+    });
+
+    this.input.on('pointermove', (pointer) => {
+      if (pointer.id === this.joystickPointerId && pointer.isDown) {
+        this.updateJoystick(pointer);
+      }
+    });
+
+    this.input.on('pointerup', (pointer) => {
+      if (pointer.id === this.joystickPointerId) {
+        this.joystickPointerId = -1;
+        this.touchMoveX = 0;
+        this.touchMoveY = 0;
+        knob.setPosition(cx, cy);
+        this.syncTouchInput();
+      }
+    });
+  }
+
+  updateJoystick(pointer) {
+    const base = this.joyBase;
+    const dx = pointer.x - base.x;
+    const dy = pointer.y - base.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = base.radius;
+
+    let nx, ny;
+    if (dist > maxDist) {
+      nx = (dx / dist) * maxDist;
+      ny = (dy / dist) * maxDist;
+    } else {
+      nx = dx;
+      ny = dy;
+    }
+
+    this.joyKnob.setPosition(base.x + nx, base.y + ny);
+
+    // Normalize to -1..1 range with dead zone
+    const normX = nx / maxDist;
+    const normY = ny / maxDist;
+    this.touchMoveX = Math.abs(normX) > JOYSTICK_DEAD_ZONE ? normX : 0;
+    this.touchMoveY = Math.abs(normY) > JOYSTICK_DEAD_ZONE ? normY : 0;
+
+    this.syncTouchInput();
+  }
+
+  createActionButtons(screenW, safeBottom) {
+    const btnRadius = Math.min(28, screenW * 0.05);
+    const pad = btnRadius * 0.6;
+
+    // Position buttons on the right side
+    const rightX = screenW - btnRadius - 30;
+    const bottomY = safeBottom - btnRadius - 20;
+
+    // Attack button (bottom-right, large)
+    this.createTouchButton(rightX, bottomY, btnRadius, '⚔️', 0xff4444, () => {
+      this.emitTouchAction('attack');
+    });
+
+    // Interact button (above attack)
+    this.createTouchButton(rightX, bottomY - btnRadius * 2 - pad, btnRadius * 0.8, 'E', 0x44aaff, () => {
+      this.emitTouchAction('interact');
+    });
+
+    // Inventory button (above interact)
+    this.createTouchButton(rightX - btnRadius * 2 - pad, bottomY, btnRadius * 0.8, 'I', 0xffaa44, () => {
+      this.showInventory = !this.showInventory;
+      this.refreshHUD();
+    });
+  }
+
+  createTouchButton(x, y, radius, label, color, callback) {
+    const bg = this.add.circle(x, y, radius, color, 0.3);
+    bg.setStrokeStyle(2, color, 0.6);
+    this.touchContainer.add(bg);
+
+    const text = this.add.text(x, y, label, {
+      fontSize: `${Math.max(12, radius * 0.7)}px`,
+      fill: '#ffffff',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5);
+    this.touchContainer.add(text);
+
+    // Make interactive
+    bg.setInteractive(new Phaser.Geom.Circle(0, 0, radius), Phaser.Geom.Circle.Contains);
+    bg.on('pointerdown', () => {
+      bg.setAlpha(0.8);
+      callback();
+    });
+    bg.on('pointerup', () => {
+      bg.setAlpha(1);
+    });
+    bg.on('pointerout', () => {
+      bg.setAlpha(1);
+    });
+  }
+
+  emitTouchAction(action) {
+    if (action === 'attack') {
+      const player = this.getActivePlayer();
+      if (player && player.active) {
+        player.tryAttack();
+      }
+    } else if (action === 'interact') {
+      const dungeonScene = this.scene.get('DungeonScene');
+      if (dungeonScene && dungeonScene.scene.isActive()) {
+        dungeonScene.handleTouchInteract();
+      } else {
+        const townScene = this.scene.get('TownScene');
+        if (townScene && townScene.scene.isActive()) {
+          townScene.handleTouchInteract();
+        }
+      }
+    }
   }
 
   createHUD() {
@@ -114,12 +312,16 @@ export class UIScene extends Phaser.Scene {
 
     // ---- Bottom: Controls hint ----
     const controlsY = height - 20;
-    const controlsText = 'WASD: Move | SPACE: Attack | E: Interact | I: Inventory';
-    this.controlsHint = this.add.text(width / 2, controlsY, controlsText, {
-      fontSize: '9px', fill: '#888888', fontFamily: 'monospace',
-      stroke: '#000000', strokeThickness: 1,
-    }).setOrigin(0.5);
-    this.uiContainer.add(this.controlsHint);
+    const controlsText = this.isTouchDevice
+      ? ''
+      : 'WASD: Move | SPACE: Attack | E: Interact | I: Inventory';
+    if (controlsText) {
+      this.controlsHint = this.add.text(width / 2, controlsY, controlsText, {
+        fontSize: '9px', fill: '#888888', fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      }).setOrigin(0.5);
+      this.uiContainer.add(this.controlsHint);
+    }
 
     // ---- Item Icons Bar (always visible, bottom-left) ----
     this.createItemIconsBar(width, height);
@@ -137,7 +339,8 @@ export class UIScene extends Phaser.Scene {
     const iconSize = 32;
     const iconPad = 6;
     const barX = 10;
-    const barY = height - 56;
+    // Move item bar higher on touch devices to avoid overlapping with joystick
+    const barY = this.isTouchDevice ? height - 160 : height - 56;
 
     // Background for the item bar
     const totalWidth = items.length * (iconSize + iconPad) + iconPad;
