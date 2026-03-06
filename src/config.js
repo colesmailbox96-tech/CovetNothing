@@ -1,7 +1,7 @@
 // Game balance constants
 export const GAME_CONFIG = {
   TILE_SIZE: 32,
-  PLAYER_SPEED: 160,
+  PLAYER_SPEED: 130,
   ENEMY_SPEED: 60,
   ENEMY_CHASE_SPEED: 90,
   ENEMY_AGGRO_RANGE: 150,
@@ -9,10 +9,10 @@ export const GAME_CONFIG = {
   ENEMY_ATTACK_COOLDOWN: 1200,
 
   PLAYER_BASE_HP: 100,
-  PLAYER_BASE_ATTACK: 15,
-  PLAYER_HP_PER_LEVEL: 20,
-  PLAYER_ATTACK_PER_LEVEL: 3,
-  PLAYER_ATTACK_COOLDOWN: 500,
+  PLAYER_BASE_ATTACK: 10,
+  PLAYER_HP_PER_LEVEL: 12,
+  PLAYER_ATTACK_PER_LEVEL: 2,
+  PLAYER_ATTACK_COOLDOWN: 600,
   PLAYER_ATTACK_REACH: 50,
   PLAYER_COMBAT_MODE_DURATION: 3000,
 
@@ -31,9 +31,10 @@ export const GAME_CONFIG = {
   BOSS_ROOM_INTERVAL: 5,     // boss room every N rooms on a floor
 
   // Threat-budget spawning
-  THREAT_BUDGET_BASE: 4,
-  THREAT_BUDGET_DEPTH_SCALE: 1.5,   // extra budget per floor
+  THREAT_BUDGET_BASE: 5,
+  THREAT_BUDGET_DEPTH_SCALE: 1.8,   // extra budget per floor
   THREAT_BUDGET_ELITE_BONUS: 4,
+  THREAT_BUDGET_BOSS_BONUS: 8,
   MAX_ENEMIES_PER_ROOM: 8,          // cap for mobile performance
   WAVE_THRESHOLD: 2,                 // spawn next wave when remaining <= this
 
