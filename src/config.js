@@ -24,13 +24,21 @@ export const GAME_CONFIG = {
   FLOOR_GOLD_SCALE: 0.15,
   FLOOR_EXP_SCALE: 0.1,
 
-  // Dungeon generation
-  DUNGEON_WIDTH: 50,
-  DUNGEON_HEIGHT: 50,
-  MIN_ROOM_SIZE: 5,
-  MAX_ROOM_SIZE: 10,
+  // Dungeon generation (room-graph model)
+  ROOM_TILE_W: 24,           // room width in tiles
+  ROOM_TILE_H: 14,           // room height in tiles
   MAX_ROOMS: 12,
-  ENEMIES_PER_ROOM: 2,
+  BOSS_ROOM_INTERVAL: 5,     // boss room every N rooms on a floor
+
+  // Threat-budget spawning
+  THREAT_BUDGET_BASE: 4,
+  THREAT_BUDGET_DEPTH_SCALE: 1.5,   // extra budget per floor
+  THREAT_BUDGET_ELITE_BONUS: 4,
+  MAX_ENEMIES_PER_ROOM: 8,          // cap for mobile performance
+  WAVE_THRESHOLD: 2,                 // spawn next wave when remaining <= this
+
+  // Room types: normal, elite, treasure, merchant, rest, boss
+  ROOM_TYPES: ['normal', 'elite', 'treasure', 'merchant', 'rest', 'boss'],
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];

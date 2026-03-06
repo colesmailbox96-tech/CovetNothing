@@ -1,201 +1,116 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '../config.js';
 
-// Simple BSP-style dungeon generator
+/**
+ * Generates a self-contained tilemap for a single Room.
+ * Each room is a discrete chunk: border walls, floor interior,
+ * door openings, optional obstacles.
+ *
+ * map values: 1 = wall, 0 = floor, 2 = stairs
+ */
 export class DungeonGenerator {
-  constructor(width, height) {
-    this.width = width || GAME_CONFIG.DUNGEON_WIDTH;
-    this.height = height || GAME_CONFIG.DUNGEON_HEIGHT;
-    this.map = [];
-    this.rooms = [];
-    this.corridors = [];
-    this.connections = [];
-    this.stairsPos = null;
-    this.spawnPos = null;
-    this.enemySpawns = [];
-    this.enemySpawnsByRoom = {};
-    this.tileOwner = [];
-    this.craftingBenchPos = null;
-  }
+  /**
+   * @param {object}  roomNode – from RoomGraph (id, type, width, height, doors)
+   * @param {object}  opts     – { hasStairs: bool, hasCraftingBench: bool }
+   * @returns {{ map, width, height, doorPositions, spawnPos, stairsPos, craftingBenchPos, obstacles }}
+   */
+  static generateRoom(roomNode, opts = {}) {
+    const w = roomNode.width;
+    const h = roomNode.height;
 
-  generate(floor) {
-    // Initialize with walls (1 = wall, 0 = floor, 2 = stairs)
-    this.map = [];
-    this.tileOwner = [];
-    for (let y = 0; y < this.height; y++) {
-      this.map[y] = [];
-      this.tileOwner[y] = [];
-      for (let x = 0; x < this.width; x++) {
-        this.map[y][x] = 1;
-        this.tileOwner[y][x] = -1;
-      }
-    }
-    this.rooms = [];
-    this.corridors = [];
-    this.connections = [];
-    this.enemySpawns = [];
-    this.enemySpawnsByRoom = {};
-
-    const maxRooms = GAME_CONFIG.MAX_ROOMS + Math.floor(floor * 0.5);
-    const enemiesPerRoom = GAME_CONFIG.ENEMIES_PER_ROOM + Math.floor(floor * 0.3);
-
-    // Generate rooms
-    for (let i = 0; i < maxRooms * 3; i++) {
-      if (this.rooms.length >= maxRooms) break;
-
-      const w = Phaser.Math.Between(GAME_CONFIG.MIN_ROOM_SIZE, GAME_CONFIG.MAX_ROOM_SIZE);
-      const h = Phaser.Math.Between(GAME_CONFIG.MIN_ROOM_SIZE, GAME_CONFIG.MAX_ROOM_SIZE);
-      const x = Phaser.Math.Between(1, this.width - w - 1);
-      const y = Phaser.Math.Between(1, this.height - h - 1);
-
-      const newRoom = { x, y, w, h, cx: Math.floor(x + w / 2), cy: Math.floor(y + h / 2) };
-
-      // Check overlap
-      let overlaps = false;
-      for (const room of this.rooms) {
-        if (x <= room.x + room.w + 1 && x + w + 1 >= room.x &&
-            y <= room.y + room.h + 1 && y + h + 1 >= room.y) {
-          overlaps = true;
-          break;
-        }
-      }
-
-      if (!overlaps) {
-        const roomIndex = this.rooms.length;
-        this.carveRoom(newRoom, roomIndex);
-        if (this.rooms.length > 0) {
-          const prev = this.rooms[this.rooms.length - 1];
-          const prevIndex = this.rooms.length - 1;
-          const path = this.carveCorridor(prev.cx, prev.cy, newRoom.cx, newRoom.cy, roomIndex);
-          const doorPos = this.findDoorPosition(path, newRoom);
-          this.connections.push({
-            fromRoom: prevIndex,
-            toRoom: roomIndex,
-            path,
-            doorPos,
-          });
-        }
-        newRoom.index = roomIndex;
-        this.rooms.push(newRoom);
+    // Initialize map (all walls)
+    const map = [];
+    for (let y = 0; y < h; y++) {
+      map[y] = [];
+      for (let x = 0; x < w; x++) {
+        map[y][x] = 1; // wall
       }
     }
 
-    // Set spawn in first room
-    const firstRoom = this.rooms[0];
-    this.spawnPos = { x: firstRoom.cx, y: firstRoom.cy };
+    // Carve interior floor
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        map[y][x] = 0; // floor
+      }
+    }
 
-    // Set stairs in last room
-    const lastRoom = this.rooms[this.rooms.length - 1];
-    this.stairsPos = { x: lastRoom.cx, y: lastRoom.cy };
-    this.map[lastRoom.cy][lastRoom.cx] = 2;
+    // --- Door openings ---
+    const doorPositions = {}; // direction -> { tileX, tileY }
+    for (const door of roomNode.doors) {
+      const pos = DungeonGenerator._doorTile(door.direction, w, h);
+      // Carve the wall tile so it becomes floor
+      map[pos.y][pos.x] = 0;
+      // Also carve adjacent tile inside so there's a 2-wide passage
+      const inner = DungeonGenerator._innerTile(door.direction, pos, w, h);
+      if (inner) map[inner.y][inner.x] = 0;
+      doorPositions[door.direction] = { tileX: pos.x, tileY: pos.y, edgeId: door.edgeId, targetRoom: door.targetRoom };
+    }
 
-    // Crafting bench in safe room (offset from center, clamped within room bounds)
-    const benchX = Math.max(firstRoom.x + 1, Math.min(firstRoom.cx + 2, firstRoom.x + firstRoom.w - 2));
-    const benchY = Math.max(firstRoom.y + 1, Math.min(firstRoom.cy - 1, firstRoom.y + firstRoom.h - 2));
-    this.craftingBenchPos = { x: benchX, y: benchY };
-
-    // Place enemies in rooms (skip first room - safe room)
-    for (let i = 1; i < this.rooms.length; i++) {
-      const room = this.rooms[i];
-      const count = Math.min(enemiesPerRoom, Math.floor(room.w * room.h / 8));
-      const roomSpawns = [];
-      for (let j = 0; j < count; j++) {
-        const ex = Phaser.Math.Between(room.x + 1, room.x + room.w - 2);
-        const ey = Phaser.Math.Between(room.y + 1, room.y + room.h - 2);
-        if (this.map[ey][ex] === 0) {
-          const type = Math.random() < 0.5 ? 'weeping-widow' : 'temple-beetle';
-          const spawn = { x: ex, y: ey, type, roomIndex: i };
-          this.enemySpawns.push(spawn);
-          roomSpawns.push(spawn);
+    // --- Optional obstacles (small wall pillars inside the room) ---
+    const obstacles = [];
+    if (roomNode.type === 'normal' || roomNode.type === 'elite' || roomNode.type === 'boss') {
+      const count = Phaser.Math.Between(0, 3);
+      for (let i = 0; i < count; i++) {
+        const ox = Phaser.Math.Between(3, w - 4);
+        const oy = Phaser.Math.Between(3, h - 4);
+        if (map[oy][ox] === 0) {
+          map[oy][ox] = 1; // wall obstacle
+          obstacles.push({ x: ox, y: oy });
         }
       }
-      this.enemySpawnsByRoom[i] = roomSpawns;
+    }
+
+    // Spawn position: centre of room
+    const spawnPos = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
+
+    // Stairs (placed near centre-right if needed)
+    let stairsPos = null;
+    if (opts.hasStairs) {
+      const sx = Math.min(w - 3, Math.floor(w / 2) + 2);
+      const sy = Math.floor(h / 2);
+      map[sy][sx] = 2;
+      stairsPos = { x: sx, y: sy };
+    }
+
+    // Crafting bench (placed near centre-left if needed)
+    let craftingBenchPos = null;
+    if (opts.hasCraftingBench) {
+      const bx = Math.max(2, Math.floor(w / 2) - 2);
+      const by = Math.max(2, Math.floor(h / 2) - 1);
+      craftingBenchPos = { x: bx, y: by };
     }
 
     return {
-      map: this.map,
-      rooms: this.rooms,
-      connections: this.connections,
-      tileOwner: this.tileOwner,
-      spawnPos: this.spawnPos,
-      stairsPos: this.stairsPos,
-      enemySpawns: this.enemySpawns,
-      enemySpawnsByRoom: this.enemySpawnsByRoom,
-      craftingBenchPos: this.craftingBenchPos,
+      map,
+      width: w,
+      height: h,
+      doorPositions,
+      spawnPos,
+      stairsPos,
+      craftingBenchPos,
+      obstacles,
     };
   }
 
-  carveRoom(room, roomIndex) {
-    for (let y = room.y; y < room.y + room.h; y++) {
-      for (let x = room.x; x < room.x + room.w; x++) {
-        this.map[y][x] = 0;
-        this.tileOwner[y][x] = roomIndex;
-      }
+  /** Return the tile on the wall border for a given direction */
+  static _doorTile(direction, w, h) {
+    switch (direction) {
+      case 'north': return { x: Math.floor(w / 2), y: 0 };
+      case 'south': return { x: Math.floor(w / 2), y: h - 1 };
+      case 'east':  return { x: w - 1, y: Math.floor(h / 2) };
+      case 'west':  return { x: 0, y: Math.floor(h / 2) };
+      default:      return { x: Math.floor(w / 2), y: 0 };
     }
   }
 
-  carveCorridor(x1, y1, x2, y2, destRoomIndex) {
-    const path = [];
-    let x = x1;
-    let y = y1;
-
-    // Horizontal first, then vertical (or vice versa, randomly)
-    if (Math.random() < 0.5) {
-      while (x !== x2) {
-        this.map[y][x] = 0;
-        path.push({ x, y });
-        if (this.tileOwner[y][x] === -1) {
-          this.tileOwner[y][x] = destRoomIndex;
-        }
-        x += x < x2 ? 1 : -1;
-      }
-      while (y !== y2) {
-        this.map[y][x] = 0;
-        path.push({ x, y });
-        if (this.tileOwner[y][x] === -1) {
-          this.tileOwner[y][x] = destRoomIndex;
-        }
-        y += y < y2 ? 1 : -1;
-      }
-    } else {
-      while (y !== y2) {
-        this.map[y][x] = 0;
-        path.push({ x, y });
-        if (this.tileOwner[y][x] === -1) {
-          this.tileOwner[y][x] = destRoomIndex;
-        }
-        y += y < y2 ? 1 : -1;
-      }
-      while (x !== x2) {
-        this.map[y][x] = 0;
-        path.push({ x, y });
-        if (this.tileOwner[y][x] === -1) {
-          this.tileOwner[y][x] = destRoomIndex;
-        }
-        x += x < x2 ? 1 : -1;
-      }
+  /** Return the tile just inside the wall so there's a passable entrance */
+  static _innerTile(direction, pos, w, h) {
+    switch (direction) {
+      case 'north': return { x: pos.x, y: pos.y + 1 };
+      case 'south': return { x: pos.x, y: pos.y - 1 };
+      case 'east':  return { x: pos.x - 1, y: pos.y };
+      case 'west':  return { x: pos.x + 1, y: pos.y };
+      default:      return null;
     }
-    this.map[y2][x2] = 0;
-    path.push({ x: x2, y: y2 });
-
-    return path;
-  }
-
-  findDoorPosition(path, destRoom) {
-    // Find the last corridor tile before entering the destination room
-    for (let i = 0; i < path.length; i++) {
-      const p = path[i];
-      if (p.x >= destRoom.x && p.x < destRoom.x + destRoom.w &&
-          p.y >= destRoom.y && p.y < destRoom.y + destRoom.h) {
-        // This tile is inside destRoom; use the tile before it as door position
-        if (i > 0) {
-          return { x: path[i - 1].x, y: path[i - 1].y };
-        }
-        return { x: p.x, y: p.y };
-      }
-    }
-    // Fallback: use midpoint of the path
-    const mid = Math.floor(path.length / 2);
-    return { x: path[mid].x, y: path[mid].y };
   }
 }

@@ -11,6 +11,7 @@ export const ENEMY_DATA = {
     spriteSize: 112,
     gold: { min: 5, max: 10 },
     exp: 20,
+    threatValue: 3,
     drops: [
       { itemId: 'bones', chance: 1.0 },
     ],
@@ -32,6 +33,7 @@ export const ENEMY_DATA = {
     spriteSize: 80,
     gold: { min: 1, max: 5 },
     exp: 10,
+    threatValue: 1,
     drops: [
       { itemId: 'temple-ash', chance: 0.5 },
       { itemId: 'polished-beetle-eye', chance: 0.2 },

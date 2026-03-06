@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG, getDirection } from '../config.js';
+import { RoomGraph } from '../systems/RoomGraph.js';
 import { DungeonGenerator } from '../systems/DungeonGenerator.js';
+import { ThreatBudgetSpawner } from '../systems/ThreatBudgetSpawner.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Player } from '../entities/Player.js';
 import { Enemy } from '../entities/Enemy.js';
@@ -18,55 +20,38 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   create() {
-    // Generate dungeon
-    const generator = new DungeonGenerator();
-    const dungeon = generator.generate(this.currentFloor);
-
-    this.dungeonData = dungeon;
     this.tileSize = GAME_CONFIG.TILE_SIZE;
 
-    // Room state tracking
-    this.revealedRooms = new Set([0]); // Room 0 (safe room) is always revealed
-    this.roomCleared = new Set([0]);   // Safe room starts cleared
-    this.activeCombatRoom = -1;        // Which room has active combat (-1 = none)
-    this.roomEnemies = {};             // Maps roomIndex -> array of enemy sprites
+    // ---- Generate floor graph ----
+    const graph = RoomGraph.generate(this.currentFloor);
+    this.graph = graph;
 
-    // Create tileset textures
+    // Room state
+    this.currentRoomId = 0;
+    this.activeCombatRoom = -1;
+    this.roomEnemies = {};
+    this.waveQueue = [];     // remaining waves for active combat room
+    this.waveActive = false;
+    this.waveSpawning = false;
+
+    // Create tile textures (same as before)
     this.createTileTextures();
 
-    // Create tilemap with room visibility
-    this.createTilemap(dungeon);
-
-    // Create player
-    const spawnX = dungeon.spawnPos.x * this.tileSize + this.tileSize / 2;
-    const spawnY = dungeon.spawnPos.y * this.tileSize + this.tileSize / 2;
-    this.player = new Player(this, spawnX, spawnY, this.levelSystem);
-
-    // Create enemies group (enemies spawn lazily when rooms are revealed)
+    // Create persistent groups (reused across room loads)
     this.enemies = this.physics.add.group();
-
-    // Create doors at corridor-room boundaries
-    this.doors = [];
     this.doorGroup = this.physics.add.staticGroup();
-    this.createDoors(dungeon);
+    this.wallLayer = this.physics.add.staticGroup();
+    this.floorGroup = this.add.group();
+    this._wallImages = [];
+    this._colliders = [];
 
-    // Crafting bench in safe room
-    this.createCraftingBench(dungeon.craftingBenchPos);
-
-    // Collisions
-    this.physics.add.collider(this.player, this.wallLayer);
-    this.physics.add.collider(this.enemies, this.wallLayer);
-    this.physics.add.collider(this.player, this.doorGroup);
-    this.physics.add.collider(this.enemies, this.doorGroup);
+    // Load the starting room
+    this.loadRoom(this.currentRoomId);
 
     // Camera
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.setZoom(2);
 
-    // Create stairs sprite (hidden until its room is revealed)
-    this.createStairs(dungeon.stairsPos);
-
-    // E key for interactions
+    // E key
     this.interactKey = this.input.keyboard.addKey('E');
 
     // Combat events
@@ -74,198 +59,276 @@ export class DungeonScene extends Phaser.Scene {
     this.events.on('enemyDeath', this.handleEnemyDeath, this);
     this.events.on('playerDeath', this.handlePlayerDeath, this);
 
-    // Floor text
+    // Build node minimap
+    this.createNodeMinimap();
+
+    // Initial UI
     this.updateUI();
-
-    // Minimap
-    this.createMinimap(dungeon);
   }
 
+  // ===================== TILE TEXTURES (unchanged) =====================
   createTileTextures() {
-    const tileGraphics = this.add.graphics();
+    const ts = this.tileSize;
+    const g = this.add.graphics();
 
-    // Wall tile - stone brick pattern with depth
-    tileGraphics.fillStyle(0x2a1a3a, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.lineStyle(1, 0x1a0e28, 0.8);
-    tileGraphics.lineBetween(0, 8, this.tileSize, 8);
-    tileGraphics.lineBetween(0, 16, this.tileSize, 16);
-    tileGraphics.lineBetween(0, 24, this.tileSize, 24);
-    tileGraphics.lineBetween(8, 0, 8, 8);
-    tileGraphics.lineBetween(24, 0, 24, 8);
-    tileGraphics.lineBetween(16, 8, 16, 16);
-    tileGraphics.lineBetween(0, 8, 0, 16);
-    tileGraphics.lineBetween(8, 16, 8, 24);
-    tileGraphics.lineBetween(24, 16, 24, 24);
-    tileGraphics.lineBetween(16, 24, 16, 32);
-    tileGraphics.fillStyle(0x3f2852, 0.4);
-    tileGraphics.fillRect(1, 1, this.tileSize - 2, 1);
-    tileGraphics.fillRect(1, 9, this.tileSize - 2, 1);
-    tileGraphics.fillRect(1, 17, this.tileSize - 2, 1);
-    tileGraphics.fillRect(1, 25, this.tileSize - 2, 1);
-    tileGraphics.fillStyle(0x150b20, 0.5);
-    tileGraphics.fillRect(0, 7, this.tileSize, 1);
-    tileGraphics.fillRect(0, 15, this.tileSize, 1);
-    tileGraphics.fillRect(0, 23, this.tileSize, 1);
-    tileGraphics.lineStyle(1, 0x3a2a4a, 0.3);
-    tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.generateTexture('tile-wall', this.tileSize, this.tileSize);
-    tileGraphics.clear();
+    // Wall
+    g.fillStyle(0x2a1a3a, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.lineStyle(1, 0x1a0e28, 0.8);
+    g.lineBetween(0, 8, ts, 8);
+    g.lineBetween(0, 16, ts, 16);
+    g.lineBetween(0, 24, ts, 24);
+    g.lineBetween(8, 0, 8, 8);
+    g.lineBetween(24, 0, 24, 8);
+    g.lineBetween(16, 8, 16, 16);
+    g.lineBetween(0, 8, 0, 16);
+    g.lineBetween(8, 16, 8, 24);
+    g.lineBetween(24, 16, 24, 24);
+    g.lineBetween(16, 24, 16, 32);
+    g.fillStyle(0x3f2852, 0.4);
+    g.fillRect(1, 1, ts - 2, 1);
+    g.fillRect(1, 9, ts - 2, 1);
+    g.fillRect(1, 17, ts - 2, 1);
+    g.fillRect(1, 25, ts - 2, 1);
+    g.fillStyle(0x150b20, 0.5);
+    g.fillRect(0, 7, ts, 1);
+    g.fillRect(0, 15, ts, 1);
+    g.fillRect(0, 23, ts, 1);
+    g.lineStyle(1, 0x3a2a4a, 0.3);
+    g.strokeRect(0, 0, ts, ts);
+    g.generateTexture('tile-wall', ts, ts);
+    g.clear();
 
-    // Stairs tile - carved stone steps
-    tileGraphics.fillStyle(0x6a5a3a, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.fillStyle(0x9a8a5a, 1);
-    tileGraphics.fillRect(2, 2, 28, 5);
-    tileGraphics.fillRect(4, 9, 24, 5);
-    tileGraphics.fillRect(6, 16, 20, 5);
-    tileGraphics.fillRect(8, 23, 16, 5);
-    tileGraphics.fillStyle(0x4a3a1a, 0.8);
-    tileGraphics.fillRect(2, 7, 28, 2);
-    tileGraphics.fillRect(4, 14, 24, 2);
-    tileGraphics.fillRect(6, 21, 20, 2);
-    tileGraphics.fillRect(8, 28, 16, 2);
-    tileGraphics.fillStyle(0xbaa86a, 0.5);
-    tileGraphics.fillRect(2, 2, 28, 1);
-    tileGraphics.fillRect(4, 9, 24, 1);
-    tileGraphics.fillRect(6, 16, 20, 1);
-    tileGraphics.fillRect(8, 23, 16, 1);
-    tileGraphics.generateTexture('tile-stairs', this.tileSize, this.tileSize);
-    tileGraphics.clear();
+    // Stairs
+    g.fillStyle(0x6a5a3a, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.fillStyle(0x9a8a5a, 1);
+    g.fillRect(2, 2, 28, 5);
+    g.fillRect(4, 9, 24, 5);
+    g.fillRect(6, 16, 20, 5);
+    g.fillRect(8, 23, 16, 5);
+    g.fillStyle(0x4a3a1a, 0.8);
+    g.fillRect(2, 7, 28, 2);
+    g.fillRect(4, 14, 24, 2);
+    g.fillRect(6, 21, 20, 2);
+    g.fillRect(8, 28, 16, 2);
+    g.fillStyle(0xbaa86a, 0.5);
+    g.fillRect(2, 2, 28, 1);
+    g.fillRect(4, 9, 24, 1);
+    g.fillRect(6, 16, 20, 1);
+    g.fillRect(8, 23, 16, 1);
+    g.generateTexture('tile-stairs', ts, ts);
+    g.clear();
 
-    // Door tile - reinforced wooden door
-    tileGraphics.fillStyle(0x5a3a1a, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    // Planks
-    tileGraphics.fillStyle(0x6a4a2a, 1);
-    tileGraphics.fillRect(2, 2, 12, 28);
-    tileGraphics.fillRect(18, 2, 12, 28);
-    // Metal bands
-    tileGraphics.fillStyle(0x888888, 1);
-    tileGraphics.fillRect(1, 6, 30, 2);
-    tileGraphics.fillRect(1, 16, 30, 2);
-    tileGraphics.fillRect(1, 24, 30, 2);
-    // Handle
-    tileGraphics.fillStyle(0xccaa44, 1);
-    tileGraphics.fillRect(22, 14, 4, 4);
-    // Border
-    tileGraphics.lineStyle(1, 0x3a2a0a, 1);
-    tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.generateTexture('tile-door', this.tileSize, this.tileSize);
-    tileGraphics.clear();
+    // Door
+    g.fillStyle(0x5a3a1a, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.fillStyle(0x6a4a2a, 1);
+    g.fillRect(2, 2, 12, 28);
+    g.fillRect(18, 2, 12, 28);
+    g.fillStyle(0x888888, 1);
+    g.fillRect(1, 6, 30, 2);
+    g.fillRect(1, 16, 30, 2);
+    g.fillRect(1, 24, 30, 2);
+    g.fillStyle(0xccaa44, 1);
+    g.fillRect(22, 14, 4, 4);
+    g.lineStyle(1, 0x3a2a0a, 1);
+    g.strokeRect(0, 0, ts, ts);
+    g.generateTexture('tile-door', ts, ts);
+    g.clear();
 
-    // Locked door tile - darker with lock icon
-    tileGraphics.fillStyle(0x3a2010, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.fillStyle(0x4a3020, 1);
-    tileGraphics.fillRect(2, 2, 12, 28);
-    tileGraphics.fillRect(18, 2, 12, 28);
-    tileGraphics.fillStyle(0x666666, 1);
-    tileGraphics.fillRect(1, 6, 30, 2);
-    tileGraphics.fillRect(1, 16, 30, 2);
-    tileGraphics.fillRect(1, 24, 30, 2);
-    // Lock icon
-    tileGraphics.fillStyle(0xff4444, 1);
-    tileGraphics.fillRect(13, 12, 6, 8);
-    tileGraphics.fillStyle(0xcc3333, 1);
-    tileGraphics.fillRect(14, 9, 4, 4);
-    tileGraphics.lineStyle(1, 0x2a1008, 1);
-    tileGraphics.strokeRect(0, 0, this.tileSize, this.tileSize);
-    tileGraphics.generateTexture('tile-door-locked', this.tileSize, this.tileSize);
-    tileGraphics.clear();
+    // Locked door
+    g.fillStyle(0x3a2010, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.fillStyle(0x4a3020, 1);
+    g.fillRect(2, 2, 12, 28);
+    g.fillRect(18, 2, 12, 28);
+    g.fillStyle(0x666666, 1);
+    g.fillRect(1, 6, 30, 2);
+    g.fillRect(1, 16, 30, 2);
+    g.fillRect(1, 24, 30, 2);
+    g.fillStyle(0xff4444, 1);
+    g.fillRect(13, 12, 6, 8);
+    g.fillStyle(0xcc3333, 1);
+    g.fillRect(14, 9, 4, 4);
+    g.lineStyle(1, 0x2a1008, 1);
+    g.strokeRect(0, 0, ts, ts);
+    g.generateTexture('tile-door-locked', ts, ts);
+    g.clear();
 
-    // Crafting bench tile
-    tileGraphics.fillStyle(0x5a4020, 1);
-    tileGraphics.fillRect(0, 4, this.tileSize, this.tileSize - 4);
-    // Table top
-    tileGraphics.fillStyle(0x7a5a30, 1);
-    tileGraphics.fillRect(0, 0, this.tileSize, 8);
-    // Legs
-    tileGraphics.fillStyle(0x4a3018, 1);
-    tileGraphics.fillRect(2, 8, 4, 22);
-    tileGraphics.fillRect(26, 8, 4, 22);
-    // Tools on top
-    tileGraphics.fillStyle(0xaaaaaa, 1);
-    tileGraphics.fillRect(8, 1, 3, 5);
-    tileGraphics.fillRect(14, 2, 6, 3);
-    tileGraphics.fillStyle(0xccaa44, 1);
-    tileGraphics.fillRect(22, 1, 4, 4);
-    tileGraphics.generateTexture('tile-crafting-bench', this.tileSize, this.tileSize);
-    tileGraphics.destroy();
+    // Crafting bench
+    g.fillStyle(0x5a4020, 1);
+    g.fillRect(0, 4, ts, ts - 4);
+    g.fillStyle(0x7a5a30, 1);
+    g.fillRect(0, 0, ts, 8);
+    g.fillStyle(0x4a3018, 1);
+    g.fillRect(2, 8, 4, 22);
+    g.fillRect(26, 8, 4, 22);
+    g.fillStyle(0xaaaaaa, 1);
+    g.fillRect(8, 1, 3, 5);
+    g.fillRect(14, 2, 6, 3);
+    g.fillStyle(0xccaa44, 1);
+    g.fillRect(22, 1, 4, 4);
+    g.generateTexture('tile-crafting-bench', ts, ts);
+    g.destroy();
   }
 
-  createTilemap(dungeon) {
-    this.floorGroup = this.add.group();
-    this.wallLayer = this.physics.add.staticGroup();
+  // ===================== ROOM LOADING =====================
 
-    // Room tile groups: maps roomIndex -> { floors: [], walls: [], wallBodies: [] }
-    this.roomTiles = {};
-    for (let i = 0; i < dungeon.rooms.length; i++) {
-      this.roomTiles[i] = { floors: [], walls: [], wallBodies: [] };
+  /** Tear down current room objects and build the new room */
+  loadRoom(roomId, entryDirection) {
+    // Clear previous room objects
+    this._destroyRoomObjects();
+
+    const node = this.graph.rooms[roomId];
+    this.currentRoomId = roomId;
+    node.visited = true;
+
+    // Determine special furniture
+    const isStartRoom = roomId === 0;
+    const lastRoom = this.graph.rooms[this.graph.rooms.length - 1];
+    const hasStairs = (roomId === lastRoom.id);
+    const hasCraftingBench = isStartRoom;
+
+    // Generate tilemap for this room
+    const roomData = DungeonGenerator.generateRoom(node, { hasStairs, hasCraftingBench });
+    this.roomData = roomData;
+
+    // Build tilemap visuals & physics
+    this._buildTilemap(roomData);
+
+    // Stairs
+    this.stairs = null;
+    if (roomData.stairsPos) {
+      this._createStairs(roomData.stairsPos);
     }
 
-    for (let y = 0; y < dungeon.map.length; y++) {
-      for (let x = 0; x < dungeon.map[y].length; x++) {
+    // Crafting bench
+    this.craftingBench = null;
+    this.craftingBenchPrompt = null;
+    if (roomData.craftingBenchPos) {
+      this._createCraftingBench(roomData.craftingBenchPos);
+    }
+
+    // Doors
+    this.doors = [];
+    this._createDoors(node, roomData);
+
+    // Player
+    const spawnTile = entryDirection
+      ? this._entryTile(entryDirection, roomData)
+      : roomData.spawnPos;
+
+    const px = spawnTile.x * this.tileSize + this.tileSize / 2;
+    const py = spawnTile.y * this.tileSize + this.tileSize / 2;
+
+    if (!this.player) {
+      this.player = new Player(this, px, py, this.levelSystem);
+    } else {
+      this.player.setPosition(px, py);
+      this.player.setVelocity(0, 0);
+    }
+
+    // Collisions (track so we can clean them up on next room load)
+    this._colliders = [
+      this.physics.add.collider(this.player, this.wallLayer),
+      this.physics.add.collider(this.enemies, this.wallLayer),
+      this.physics.add.collider(this.player, this.doorGroup),
+      this.physics.add.collider(this.enemies, this.doorGroup),
+    ];
+
+    // Camera
+    const worldW = roomData.width * this.tileSize;
+    const worldH = roomData.height * this.tileSize;
+    this.physics.world.setBounds(0, 0, worldW, worldH);
+    this.cameras.main.setBounds(0, 0, worldW, worldH);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.player.setDepth(10);
+
+    // If this room has enemies and isn't cleared, start combat
+    if (!node.cleared && node.type !== 'rest' && node.type !== 'treasure' && node.type !== 'merchant') {
+      this._beginRoomCombat(roomId);
+    } else {
+      // Room is clear – doors are interactable
+      this._unlockAllDoors();
+    }
+
+    // Update minimap
+    if (this.nodeMapGfx) this._redrawNodeMinimap();
+  }
+
+  /** Destroy all room-specific game objects */
+  _destroyRoomObjects() {
+    // Remove colliders from previous room
+    if (this._colliders) {
+      for (const c of this._colliders) c.destroy();
+    }
+    this._colliders = [];
+
+    // Tiles
+    if (this.floorGroup) { this.floorGroup.clear(true, true); }
+    if (this.wallLayer) { this.wallLayer.clear(true, true); }
+
+    // Enemies
+    this.enemies.clear(true, true);
+    this.roomEnemies = {};
+    this.waveQueue = [];
+    this.waveActive = false;
+    this.waveSpawning = false;
+
+    // Doors
+    this.doorGroup.clear(true, true);
+    if (this.doors) {
+      for (const d of this.doors) {
+        if (d.prompt) d.prompt.destroy();
+      }
+    }
+    this.doors = [];
+
+    // Stairs
+    if (this.stairs) { this.stairs.destroy(); this.stairs = null; }
+    if (this.stairsPrompt) { this.stairsPrompt.destroy(); this.stairsPrompt = null; }
+
+    // Crafting bench
+    if (this.craftingBench) { this.craftingBench.destroy(); this.craftingBench = null; }
+    if (this.craftingBenchPrompt) { this.craftingBenchPrompt.destroy(); this.craftingBenchPrompt = null; }
+
+    // Wall visuals stored separately
+    if (this._wallImages) {
+      for (const img of this._wallImages) img.destroy();
+    }
+    this._wallImages = [];
+  }
+
+  /** Build floor + wall tiles from roomData.map */
+  _buildTilemap(roomData) {
+    for (let y = 0; y < roomData.height; y++) {
+      for (let x = 0; x < roomData.width; x++) {
         const px = x * this.tileSize + this.tileSize / 2;
         const py = y * this.tileSize + this.tileSize / 2;
-        const tile = dungeon.map[y][x];
-        const owner = dungeon.tileOwner[y][x];
+        const tile = roomData.map[y][x];
 
         if (tile === 0 || tile === 2) {
           const floor = this.add.image(px, py, 'dungeon-floor').setDepth(0);
           this.floorGroup.add(floor);
-
-          if (owner >= 0 && this.roomTiles[owner]) {
-            this.roomTiles[owner].floors.push(floor);
-            if (!this.revealedRooms.has(owner)) {
-              floor.setVisible(false);
-            }
-          }
         }
         if (tile === 1) {
-          if (this.isAdjacentToFloor(dungeon.map, x, y)) {
+          // Only add wall physics if adjacent to a floor tile
+          if (this._isAdjacentToFloor(roomData.map, x, y)) {
             const wallImg = this.add.image(px, py, 'tile-wall').setDepth(1);
+            this._wallImages.push(wallImg);
+
             const wall = this.physics.add.staticImage(px, py, 'tile-wall');
             wall.setVisible(false);
             wall.body.setSize(this.tileSize, this.tileSize);
             this.wallLayer.add(wall);
-
-            // Determine room ownership for wall visibility
-            const adjOwner = this.getHighestAdjacentRoomOwner(dungeon, x, y);
-            if (adjOwner >= 0 && this.roomTiles[adjOwner]) {
-              this.roomTiles[adjOwner].walls.push(wallImg);
-              this.roomTiles[adjOwner].wallBodies.push(wall);
-              if (!this.revealedRooms.has(adjOwner)) {
-                wallImg.setVisible(false);
-              }
-            }
           }
         }
       }
     }
   }
 
-  getHighestAdjacentRoomOwner(dungeon, x, y) {
-    // Return the highest room index of any adjacent floor tile
-    let maxOwner = -1;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const ny = y + dy;
-        const nx = x + dx;
-        if (ny >= 0 && ny < dungeon.map.length && nx >= 0 && nx < dungeon.map[0].length) {
-          const tile = dungeon.map[ny][nx];
-          if (tile === 0 || tile === 2) {
-            const owner = dungeon.tileOwner[ny][nx];
-            if (owner > maxOwner) maxOwner = owner;
-          }
-        }
-      }
-    }
-    return maxOwner;
-  }
-
-  isAdjacentToFloor(map, x, y) {
+  _isAdjacentToFloor(map, x, y) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (dx === 0 && dy === 0) continue;
@@ -279,57 +342,181 @@ export class DungeonScene extends Phaser.Scene {
     return false;
   }
 
-  createDoors(dungeon) {
-    for (const conn of dungeon.connections) {
-      const doorX = conn.doorPos.x * this.tileSize + this.tileSize / 2;
-      const doorY = conn.doorPos.y * this.tileSize + this.tileSize / 2;
+  // ===================== DOORS =====================
+
+  _createDoors(node, roomData) {
+    for (const dir of Object.keys(roomData.doorPositions)) {
+      const dp = roomData.doorPositions[dir];
+      const doorX = dp.tileX * this.tileSize + this.tileSize / 2;
+      const doorY = dp.tileY * this.tileSize + this.tileSize / 2;
 
       const doorSprite = this.physics.add.staticImage(doorX, doorY, 'tile-door');
       doorSprite.setDepth(5);
       doorSprite.body.setSize(this.tileSize, this.tileSize);
       this.doorGroup.add(doorSprite);
 
-      // Only show doors adjacent to a revealed room
-      const fromRevealed = this.revealedRooms.has(conn.fromRoom);
-      const toRevealed = this.revealedRooms.has(conn.toRoom);
-      if (!fromRevealed && !toRevealed) {
-        doorSprite.setVisible(false);
-        doorSprite.body.enable = false;
-      }
-
-      const door = {
+      this.doors.push({
         sprite: doorSprite,
-        fromRoom: conn.fromRoom,
-        toRoom: conn.toRoom,
-        tileX: conn.doorPos.x,
-        tileY: conn.doorPos.y,
-        state: (fromRevealed || toRevealed) ? 'closed' : 'hidden',
+        direction: dir,
+        tileX: dp.tileX,
+        tileY: dp.tileY,
+        edgeId: dp.edgeId,
+        targetRoom: dp.targetRoom,
+        state: 'closed', // will be locked during combat
         prompt: null,
-      };
-
-      this.doors.push(door);
+      });
     }
   }
 
-  createCraftingBench(benchPos) {
-    const bx = benchPos.x * this.tileSize + this.tileSize / 2;
-    const by = benchPos.y * this.tileSize + this.tileSize / 2;
-    this.craftingBench = this.add.image(bx, by, 'tile-crafting-bench').setDepth(2);
-    this.craftingBenchPrompt = null;
+  _lockAllDoors() {
+    for (const door of this.doors) {
+      door.state = 'locked';
+      door.sprite.setTexture('tile-door-locked');
+      door.sprite.setVisible(true);
+      door.sprite.body.enable = true;
+      if (door.prompt) { door.prompt.destroy(); door.prompt = null; }
+    }
   }
 
-  createStairs(stairsPos) {
-    const sx = stairsPos.x * this.tileSize + this.tileSize / 2;
-    const sy = stairsPos.y * this.tileSize + this.tileSize / 2;
+  _unlockAllDoors() {
+    for (const door of this.doors) {
+      door.state = 'closed';
+      door.sprite.setTexture('tile-door');
+      door.sprite.setVisible(true);
+      door.sprite.body.enable = true;
+    }
+  }
+
+  // ===================== DOOR TRANSITION (fade) =====================
+
+  _openDoor(door) {
+    if (door.prompt) { door.prompt.destroy(); door.prompt = null; }
+
+    const targetRoomId = door.targetRoom;
+    const targetNode = this.graph.rooms[targetRoomId];
+
+    // Determine entry direction into the target room: the door that leads back here
+    const returnDoor = targetNode.doors.find(d => d.targetRoom === this.currentRoomId);
+    const entryDir = returnDoor ? returnDoor.direction : null;
+
+    // Fade out → load new room → fade in
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.loadRoom(targetRoomId, entryDir);
+      this.cameras.main.fadeIn(300, 0, 0, 0);
+    });
+  }
+
+  /** Get spawn tile inside room when entering from a given door direction */
+  _entryTile(direction, roomData) {
+    const dp = roomData.doorPositions[direction];
+    if (!dp) return roomData.spawnPos;
+    // Step 2 tiles inside from the door
+    switch (direction) {
+      case 'north': return { x: dp.tileX, y: dp.tileY + 2 };
+      case 'south': return { x: dp.tileX, y: dp.tileY - 2 };
+      case 'east':  return { x: dp.tileX - 2, y: dp.tileY };
+      case 'west':  return { x: dp.tileX + 2, y: dp.tileY };
+      default: return roomData.spawnPos;
+    }
+  }
+
+  // ===================== COMBAT =====================
+
+  _beginRoomCombat(roomId) {
+    const node = this.graph.rooms[roomId];
+    const plan = ThreatBudgetSpawner.plan(this.currentFloor, node.type);
+
+    if (plan.waves.length === 0) {
+      node.cleared = true;
+      this._unlockAllDoors();
+      return;
+    }
+
+    this.activeCombatRoom = roomId;
+    this.roomEnemies[roomId] = [];
+
+    // Lock doors
+    this._lockAllDoors();
+
+    // Queue waves
+    this.waveQueue = plan.waves.slice(); // shallow copy
+    this._spawnNextWave(roomId);
+
+    // Popup
+    const room = this.roomData;
+    const rx = Math.floor(room.width / 2) * this.tileSize + this.tileSize / 2;
+    const ry = Math.floor(room.height / 2) * this.tileSize;
+    this.showPopup(rx, ry - 20, 'Enemies appear!', '#ff6644');
+  }
+
+  _spawnNextWave(roomId) {
+    if (this.waveQueue.length === 0) return;
+
+    const wave = this.waveQueue.shift();
+    this.waveActive = true;
+
+    const room = this.roomData;
+    for (const spawn of wave) {
+      // Pick random floor tile inside the room (avoid borders & obstacles)
+      let ex, ey, attempts = 0;
+      do {
+        ex = Phaser.Math.Between(2, room.width - 3);
+        ey = Phaser.Math.Between(2, room.height - 3);
+        attempts++;
+      } while (room.map[ey][ex] !== 0 && attempts < 30);
+
+      const epx = ex * this.tileSize + this.tileSize / 2;
+      const epy = ey * this.tileSize + this.tileSize / 2;
+      const enemy = new Enemy(this, epx, epy, spawn.type);
+      enemy.roomIndex = roomId;
+      this.enemies.add(enemy);
+      if (!this.roomEnemies[roomId]) this.roomEnemies[roomId] = [];
+      this.roomEnemies[roomId].push(enemy);
+    }
+  }
+
+  _checkCombatCleared() {
+    if (this.activeCombatRoom < 0) return;
+    if (this.waveSpawning) return; // prevent rapid successive wave spawns
+    const roomId = this.activeCombatRoom;
+    const alive = (this.roomEnemies[roomId] || []).filter(
+      e => e.active && e.state !== 'dead'
+    );
+
+    // Wave threshold: spawn next wave when few enemies remain
+    if (alive.length <= GAME_CONFIG.WAVE_THRESHOLD && this.waveQueue.length > 0) {
+      this.waveSpawning = true;
+      this.time.delayedCall(500, () => {
+        this._spawnNextWave(roomId);
+        this.waveSpawning = false;
+      });
+      return;
+    }
+
+    if (alive.length === 0 && this.waveQueue.length === 0) {
+      const node = this.graph.rooms[roomId];
+      node.cleared = true;
+      this.activeCombatRoom = -1;
+      this.waveActive = false;
+
+      this._unlockAllDoors();
+
+      const room = this.roomData;
+      const rx = Math.floor(room.width / 2) * this.tileSize + this.tileSize / 2;
+      const ry = Math.floor(room.height / 2) * this.tileSize;
+      this.showPopup(rx, ry - 20, 'Room Cleared!', '#44ff44');
+
+      if (this.nodeMapGfx) this._redrawNodeMinimap();
+    }
+  }
+
+  // ===================== STAIRS =====================
+
+  _createStairs(pos) {
+    const sx = pos.x * this.tileSize + this.tileSize / 2;
+    const sy = pos.y * this.tileSize + this.tileSize / 2;
     this.stairs = this.add.image(sx, sy, 'tile-stairs').setDepth(1);
-
-    // Determine which room the stairs are in
-    const stairsRoom = this.dungeonData.tileOwner[stairsPos.y][stairsPos.x];
-    if (stairsRoom >= 0 && !this.revealedRooms.has(stairsRoom)) {
-      this.stairs.setVisible(false);
-    }
-
-    // Pulsing effect
     this.tweens.add({
       targets: this.stairs,
       alpha: 0.6,
@@ -339,241 +526,230 @@ export class DungeonScene extends Phaser.Scene {
     });
   }
 
-  // Reveal a room's tiles, spawn enemies, and set up combat
-  revealRoom(roomIndex) {
-    if (this.revealedRooms.has(roomIndex)) return;
-    this.revealedRooms.add(roomIndex);
+  _createCraftingBench(pos) {
+    const bx = pos.x * this.tileSize + this.tileSize / 2;
+    const by = pos.y * this.tileSize + this.tileSize / 2;
+    this.craftingBench = this.add.image(bx, by, 'tile-crafting-bench').setDepth(2);
+    this.craftingBenchPrompt = null;
+  }
 
-    // Show room tiles
-    const tiles = this.roomTiles[roomIndex];
-    if (tiles) {
-      for (const floor of tiles.floors) floor.setVisible(true);
-      for (const wall of tiles.walls) wall.setVisible(true);
+  goToNextFloor() {
+    this.scene.restart({ floor: this.currentFloor + 1 });
+  }
+
+  // ===================== NODE MINIMAP =====================
+
+  createNodeMinimap() {
+    this.nodeMapGfx = this.add.graphics();
+    this.nodeMapGfx.setScrollFactor(0);
+    this.nodeMapGfx.setDepth(100);
+    this._redrawNodeMinimap();
+  }
+
+  _redrawNodeMinimap() {
+    const g = this.nodeMapGfx;
+    g.clear();
+
+    const offsetX = 10;
+    const offsetY = 10;
+    const nodeSize = 14;
+    const gap = 24;
+
+    // Layout rooms in a simple BFS grid from room 0
+    const positions = this._layoutGraph();
+
+    // Background
+    const maxX = Object.values(positions).reduce((m, p) => Math.max(m, p.col), 0) + 1;
+    const maxY = Object.values(positions).reduce((m, p) => Math.max(m, p.row), 0) + 1;
+    g.fillStyle(0x000000, 0.6);
+    g.fillRect(offsetX - 4, offsetY - 4, maxX * gap + 8, maxY * gap + 8);
+
+    // Draw edges
+    g.lineStyle(2, 0x555555, 0.8);
+    for (const edge of this.graph.edges) {
+      const fromRoom = this.graph.rooms[edge.from];
+      const toRoom = this.graph.rooms[edge.to];
+      if (!fromRoom.visited && !toRoom.visited) continue;
+      const p1 = positions[edge.from];
+      const p2 = positions[edge.to];
+      if (!p1 || !p2) continue;
+      const x1 = offsetX + p1.col * gap + nodeSize / 2;
+      const y1 = offsetY + p1.row * gap + nodeSize / 2;
+      const x2 = offsetX + p2.col * gap + nodeSize / 2;
+      const y2 = offsetY + p2.row * gap + nodeSize / 2;
+      g.lineBetween(x1, y1, x2, y2);
     }
 
-    // Show stairs if they're in this room
-    const stairsRoom = this.dungeonData.tileOwner[this.dungeonData.stairsPos.y][this.dungeonData.stairsPos.x];
-    if (stairsRoom === roomIndex && this.stairs) {
-      this.stairs.setVisible(true);
-    }
+    // Draw room nodes
+    for (const room of this.graph.rooms) {
+      const p = positions[room.id];
+      if (!p) continue;
 
-    // Make doors connecting this room to unrevealed rooms visible (closed state)
-    for (const door of this.doors) {
-      if (door.state === 'hidden') {
-        if (door.fromRoom === roomIndex || door.toRoom === roomIndex) {
-          door.state = 'closed';
-          door.sprite.setVisible(true);
-          door.sprite.body.enable = true;
+      // Only draw visited rooms or rooms adjacent to visited rooms
+      const isAdjacent = room.doors.some(d => this.graph.rooms[d.targetRoom].visited);
+      if (!room.visited && !isAdjacent) continue;
+
+      const nx = offsetX + p.col * gap;
+      const ny = offsetY + p.row * gap;
+
+      // Color by state/type
+      let color;
+      if (room.id === this.currentRoomId) {
+        color = 0x00ff00; // current
+      } else if (room.cleared) {
+        color = 0x666666; // cleared
+      } else if (room.visited) {
+        color = 0xaaaaaa;
+      } else {
+        color = 0x333333; // unrevealed adjacent
+      }
+
+      g.fillStyle(color, 1);
+      g.fillRect(nx, ny, nodeSize, nodeSize);
+
+      // Type indicator border
+      let borderColor = 0x444444;
+      switch (room.type) {
+        case 'boss':     borderColor = 0xff0000; break;
+        case 'elite':    borderColor = 0xff8800; break;
+        case 'treasure': borderColor = 0xffff00; break;
+        case 'merchant': borderColor = 0x00aaff; break;
+        case 'rest':     borderColor = 0x44ff44; break;
+      }
+      // Only show type hint for visited/adjacent rooms
+      if (room.visited || isAdjacent) {
+        g.lineStyle(2, borderColor, 1);
+        g.strokeRect(nx, ny, nodeSize, nodeSize);
+      }
+    }
+  }
+
+  /** BFS layout: assign (row, col) to each room */
+  _layoutGraph() {
+    const positions = {};
+    const visited = new Set();
+    const queue = [{ id: 0, row: 0, col: 0 }];
+    visited.add(0);
+
+    const occupied = new Set();
+    occupied.add('0,0');
+
+    while (queue.length > 0) {
+      const { id, row, col } = queue.shift();
+      positions[id] = { row, col };
+
+      const room = this.graph.rooms[id];
+      // Direction offsets
+      const dirOffsets = [
+        { dr: -1, dc: 0 },  // up
+        { dr: 1, dc: 0 },   // down
+        { dr: 0, dc: 1 },   // right
+        { dr: 0, dc: -1 },  // left
+      ];
+      let dirIdx = 0;
+
+      for (const door of room.doors) {
+        if (visited.has(door.targetRoom)) continue;
+        visited.add(door.targetRoom);
+
+        // Try each direction until we find an unoccupied spot
+        let placed = false;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const off = dirOffsets[(dirIdx + attempt) % 4];
+          const nr = row + off.dr;
+          const nc = col + off.dc;
+          const key = `${nr},${nc}`;
+          if (!occupied.has(key)) {
+            occupied.add(key);
+            queue.push({ id: door.targetRoom, row: nr, col: nc });
+            placed = true;
+            break;
+          }
         }
-      }
-    }
-
-    // Redraw minimap to show newly revealed room
-    this.redrawMinimap();
-  }
-
-  // Spawn enemies in a room and start combat lock
-  startRoomCombat(roomIndex) {
-    if (this.roomCleared.has(roomIndex)) return;
-    if (this.activeCombatRoom === roomIndex) return;
-
-    const spawns = this.dungeonData.enemySpawnsByRoom[roomIndex];
-    if (!spawns || spawns.length === 0) {
-      // No enemies - mark as cleared immediately
-      this.roomCleared.add(roomIndex);
-      return;
-    }
-
-    this.activeCombatRoom = roomIndex;
-    this.roomEnemies[roomIndex] = [];
-
-    // Spawn enemies
-    for (const spawn of spawns) {
-      const ex = spawn.x * this.tileSize + this.tileSize / 2;
-      const ey = spawn.y * this.tileSize + this.tileSize / 2;
-      const enemy = new Enemy(this, ex, ey, spawn.type);
-      enemy.roomIndex = roomIndex;
-      this.enemies.add(enemy);
-      this.roomEnemies[roomIndex].push(enemy);
-    }
-
-    // Lock ALL doors connected to this room
-    this.lockRoomDoors(roomIndex);
-
-    // Show combat start popup
-    const room = this.dungeonData.rooms[roomIndex];
-    const rx = room.cx * this.tileSize + this.tileSize / 2;
-    const ry = room.cy * this.tileSize + this.tileSize / 2;
-    this.showPopup(rx, ry - 20, 'Enemies appear!', '#ff6644');
-  }
-
-  lockRoomDoors(roomIndex) {
-    for (const door of this.doors) {
-      if (door.fromRoom === roomIndex || door.toRoom === roomIndex) {
-        // Skip hidden doors that connect to completely undiscovered parts
-        if (door.state === 'hidden') continue;
-        door.state = 'locked';
-        door.sprite.setTexture('tile-door-locked');
-        door.sprite.setVisible(true);
-        door.sprite.body.enable = true;
-        // Remove any interaction prompt
-        if (door.prompt) {
-          door.prompt.destroy();
-          door.prompt = null;
+        if (!placed) {
+          // Extend outward
+          const off = dirOffsets[dirIdx % 4];
+          let nr = row + off.dr;
+          let nc = col + off.dc;
+          while (occupied.has(`${nr},${nc}`)) {
+            nr += off.dr;
+            nc += off.dc;
+          }
+          occupied.add(`${nr},${nc}`);
+          queue.push({ id: door.targetRoom, row: nr, col: nc });
         }
+        dirIdx++;
       }
     }
-  }
 
-  unlockRoomDoors(roomIndex) {
-    for (const door of this.doors) {
-      if (door.fromRoom === roomIndex || door.toRoom === roomIndex) {
-        // If the room on the other side is revealed, open the door fully
-        const otherRoom = door.fromRoom === roomIndex ? door.toRoom : door.fromRoom;
-        if (this.revealedRooms.has(otherRoom)) {
-          door.state = 'open';
-          door.sprite.setVisible(false);
-          door.sprite.body.enable = false;
-        } else {
-          // Other room not yet revealed - door becomes interactable
-          door.state = 'closed';
-          door.sprite.setTexture('tile-door');
-          door.sprite.setVisible(true);
-          door.sprite.body.enable = true;
-        }
-      }
+    // Normalize so min row/col = 0
+    const rows = Object.values(positions).map(p => p.row);
+    const cols = Object.values(positions).map(p => p.col);
+    const minR = Math.min(...rows);
+    const minC = Math.min(...cols);
+    for (const key of Object.keys(positions)) {
+      positions[key].row -= minR;
+      positions[key].col -= minC;
     }
+    return positions;
   }
 
-  checkRoomCombatCleared() {
-    if (this.activeCombatRoom < 0) return;
+  // ===================== INTERACTIONS =====================
 
-    const roomEnemies = this.roomEnemies[this.activeCombatRoom];
-    if (!roomEnemies) return;
-
-    const allDead = roomEnemies.every(e => !e.active || e.state === 'dead');
-    if (allDead) {
-      const clearedRoom = this.activeCombatRoom;
-      this.roomCleared.add(clearedRoom);
-      this.activeCombatRoom = -1;
-
-      // Unlock doors
-      this.unlockRoomDoors(clearedRoom);
-
-      // Show cleared popup
-      const room = this.dungeonData.rooms[clearedRoom];
-      const rx = room.cx * this.tileSize + this.tileSize / 2;
-      const ry = room.cy * this.tileSize + this.tileSize / 2;
-      this.showPopup(rx, ry - 20, 'Room Cleared!', '#44ff44');
-    }
-  }
-
-  // Check which room the player is currently in
-  getPlayerRoom() {
-    const tileX = Math.floor(this.player.x / this.tileSize);
-    const tileY = Math.floor(this.player.y / this.tileSize);
-    if (tileY >= 0 && tileY < this.dungeonData.tileOwner.length &&
-        tileX >= 0 && tileX < this.dungeonData.tileOwner[0].length) {
-      return this.dungeonData.tileOwner[tileY][tileX];
-    }
-    return -1;
-  }
-
-  // Check if the player has entered a revealed but uncleared combat room
-  checkRoomEntry() {
-    const currentRoom = this.getPlayerRoom();
-    // Room 0 is the safe room (no combat), negative values mean corridor/invalid tiles
-    if (currentRoom < 0 || currentRoom === 0) return;
-
-    // Check if this room is revealed but not yet cleared or in combat
-    if (this.revealedRooms.has(currentRoom) &&
-        !this.roomCleared.has(currentRoom) &&
-        this.activeCombatRoom !== currentRoom) {
-      // Check player is actually inside the room bounds (not just in corridor tiles owned by this room)
-      const room = this.dungeonData.rooms[currentRoom];
-      const tileX = Math.floor(this.player.x / this.tileSize);
-      const tileY = Math.floor(this.player.y / this.tileSize);
-      if (tileX >= room.x && tileX < room.x + room.w &&
-          tileY >= room.y && tileY < room.y + room.h) {
-        this.startRoomCombat(currentRoom);
-      }
-    }
-  }
-
-  // Check for door/bench/stairs interactions
   checkInteractions() {
     if (!this.player || !this.player.active) return;
     const justPressedE = Phaser.Input.Keyboard.JustDown(this.interactKey);
 
-    // Check doors
     let nearDoor = false;
+
+    // Doors
     for (const door of this.doors) {
       if (door.state === 'open' || door.state === 'hidden') continue;
 
-      const doorWorldX = door.tileX * this.tileSize + this.tileSize / 2;
-      const doorWorldY = door.tileY * this.tileSize + this.tileSize / 2;
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, doorWorldX, doorWorldY
-      );
+      const dwx = door.tileX * this.tileSize + this.tileSize / 2;
+      const dwy = door.tileY * this.tileSize + this.tileSize / 2;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, dwx, dwy);
 
       if (dist < this.tileSize * 1.5) {
         if (door.state === 'closed') {
-          // Show prompt
           if (!door.prompt) {
-            door.prompt = this.add.text(doorWorldX, doorWorldY - 20, 'Press E to open', {
-              fontSize: '10px',
-              fill: '#ffffff',
-              fontFamily: 'monospace',
-              stroke: '#000000',
-              strokeThickness: 2,
+            door.prompt = this.add.text(dwx, dwy - 20, 'Press E to open', {
+              fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2,
             }).setOrigin(0.5).setDepth(20);
           }
-
           if (justPressedE) {
-            this.openDoor(door);
+            this._openDoor(door);
             nearDoor = true;
           }
         } else if (door.state === 'locked') {
           if (!door.prompt) {
-            door.prompt = this.add.text(doorWorldX, doorWorldY - 20, 'Locked!', {
-              fontSize: '10px',
-              fill: '#ff4444',
-              fontFamily: 'monospace',
-              stroke: '#000000',
-              strokeThickness: 2,
+            door.prompt = this.add.text(dwx, dwy - 20, 'Locked!', {
+              fontSize: '10px', fill: '#ff4444', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2,
             }).setOrigin(0.5).setDepth(20);
           }
         }
       } else {
-        if (door.prompt) {
-          door.prompt.destroy();
-          door.prompt = null;
-        }
+        if (door.prompt) { door.prompt.destroy(); door.prompt = null; }
       }
     }
 
-    // Check crafting bench
+    // Crafting bench
     if (this.craftingBench) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x, this.player.y,
         this.craftingBench.x, this.craftingBench.y
       );
-
       if (dist < this.tileSize * 1.5) {
         if (!this.craftingBenchPrompt) {
           this.craftingBenchPrompt = this.add.text(
             this.craftingBench.x, this.craftingBench.y - 20,
             'Press E to craft (coming soon)',
-            {
-              fontSize: '10px',
-              fill: '#ffdd44',
-              fontFamily: 'monospace',
-              stroke: '#000000',
-              strokeThickness: 2,
-            }
+            { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
+              stroke: '#000000', strokeThickness: 2 }
           ).setOrigin(0.5).setDepth(20);
         }
-
         if (justPressedE && !nearDoor) {
           this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
             'Crafting recipes coming soon!', '#ffdd44');
@@ -584,107 +760,71 @@ export class DungeonScene extends Phaser.Scene {
       }
     }
 
-    // Check stairs
-    this.checkStairsOverlap(justPressedE);
+    // Stairs
+    this._checkStairsOverlap(justPressedE);
   }
 
-  openDoor(door) {
-    // Determine which room to reveal: pick the unrevealed room
-    let targetRoom;
-    const fromRevealed = this.revealedRooms.has(door.fromRoom);
-    const toRevealed = this.revealedRooms.has(door.toRoom);
-
-    if (!toRevealed) {
-      targetRoom = door.toRoom;
-    } else if (!fromRevealed) {
-      targetRoom = door.fromRoom;
-    } else {
-      // Both already revealed - just open the door
-      targetRoom = null;
-    }
-
-    // Remove prompt
-    if (door.prompt) {
-      door.prompt.destroy();
-      door.prompt = null;
-    }
-
-    // Reveal the target room (if there is one to reveal)
-    if (targetRoom !== null) {
-      this.revealRoom(targetRoom);
-    }
-
-    // Open the door (make passable)
-    door.state = 'open';
-    door.sprite.setVisible(false);
-    door.sprite.body.enable = false;
-  }
-
-  createMinimap(dungeon) {
-    const mmScale = 3;
-
-    this.minimapGraphics = this.add.graphics();
-    this.minimapGraphics.setScrollFactor(0);
-    this.minimapGraphics.setDepth(100);
-
-    this.drawMinimap(dungeon, mmScale);
-  }
-
-  drawMinimap(dungeon, mmScale) {
-    const g = this.minimapGraphics;
-    g.clear();
-
-    const offsetX = 10;
-    const offsetY = 10;
-    const mapW = dungeon.map[0].length;
-    const mapH = dungeon.map.length;
-
-    // Background
-    g.fillStyle(0x000000, 0.6);
-    g.fillRect(offsetX - 2, offsetY - 2, mapW * mmScale + 4, mapH * mmScale + 4);
-
-    for (let y = 0; y < mapH; y++) {
-      for (let x = 0; x < mapW; x++) {
-        const tile = dungeon.map[y][x];
-        const owner = dungeon.tileOwner[y][x];
-
-        // Only show tiles in revealed rooms
-        if (owner >= 0 && !this.revealedRooms.has(owner)) continue;
-
-        if (tile === 0) {
-          g.fillStyle(0x666666, 0.8);
-          g.fillRect(offsetX + x * mmScale, offsetY + y * mmScale, mmScale, mmScale);
-        } else if (tile === 2) {
-          g.fillStyle(0xffff00, 1);
-          g.fillRect(offsetX + x * mmScale, offsetY + y * mmScale, mmScale, mmScale);
-        }
+  _checkStairsOverlap(justPressedE) {
+    if (!this.stairs || !this.player || !this.stairs.visible) return;
+    const dist = Phaser.Math.Distance.Between(
+      this.player.x, this.player.y,
+      this.stairs.x, this.stairs.y
+    );
+    if (dist < this.tileSize) {
+      if (!this.stairsPrompt) {
+        this.stairsPrompt = this.add.text(this.stairs.x, this.stairs.y - 20, 'Press E to descend', {
+          fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(20);
       }
+      if (justPressedE) {
+        this.goToNextFloor();
+      }
+    } else if (this.stairsPrompt) {
+      this.stairsPrompt.destroy();
+      this.stairsPrompt = null;
     }
+  }
 
-    // Show door positions on minimap
+  /** Called from UIScene when the touch E button is pressed */
+  handleTouchInteract() {
+    if (!this.player || !this.player.active) return;
+
     for (const door of this.doors) {
-      if (door.state === 'closed' || door.state === 'locked') {
-        const color = door.state === 'locked' ? 0xff4444 : 0xcc8844;
-        g.fillStyle(color, 1);
-        g.fillRect(offsetX + door.tileX * mmScale, offsetY + door.tileY * mmScale, mmScale, mmScale);
+      if (door.state !== 'closed') continue;
+      const dwx = door.tileX * this.tileSize + this.tileSize / 2;
+      const dwy = door.tileY * this.tileSize + this.tileSize / 2;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, dwx, dwy);
+      if (dist < this.tileSize * 1.5) {
+        this._openDoor(door);
+        return;
       }
     }
 
-    // Player dot (will be updated)
-    if (!this.minimapPlayerDot) {
-      this.minimapPlayerDot = this.add.rectangle(0, 0, mmScale + 1, mmScale + 1, 0x00ff00);
-      this.minimapPlayerDot.setScrollFactor(0);
-      this.minimapPlayerDot.setDepth(101);
+    if (this.craftingBench) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.craftingBench.x, this.craftingBench.y
+      );
+      if (dist < this.tileSize * 1.5) {
+        this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
+          'Crafting recipes coming soon!', '#ffdd44');
+        return;
+      }
     }
 
-    this.mmScale = mmScale;
-    this.mmOffsetX = offsetX;
-    this.mmOffsetY = offsetY;
+    if (this.stairs && this.stairs.visible) {
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.stairs.x, this.stairs.y
+      );
+      if (dist < this.tileSize) {
+        this.goToNextFloor();
+      }
+    }
   }
 
-  redrawMinimap() {
-    this.drawMinimap(this.dungeonData, this.mmScale || 3);
-  }
+  // ===================== COMBAT EVENTS =====================
 
   handlePlayerAttack(attackData) {
     const enemies = this.enemies.getChildren();
@@ -698,7 +838,6 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   handleEnemyDeath(data) {
-    // Award gold and exp
     const enemyData = ENEMY_DATA[data.enemyType];
     if (!enemyData) return;
 
@@ -710,7 +849,6 @@ export class DungeonScene extends Phaser.Scene {
     this.levelSystem.addGold(goldAmount);
     const leveledUp = this.levelSystem.addExp(expAmount);
 
-    // Show gold/exp popup
     this.showPopup(data.x, data.y - 10, `+${goldAmount}g +${expAmount}xp`, '#ffdd44');
 
     if (leveledUp) {
@@ -718,21 +856,17 @@ export class DungeonScene extends Phaser.Scene {
       this.player.hp = this.player.getMaxHP();
     }
 
-    // Roll loot - items go directly to inventory
     const drops = LootSystem.rollDrops(data.enemyType, this.currentFloor);
     for (const drop of drops) {
       this.inventory.addItem(drop.itemId, drop.quantity);
       this.showPopup(data.x, data.y + 10, `+${drop.name}`, '#ffffff');
     }
 
-    // Check if room combat is cleared
-    this.checkRoomCombatCleared();
-
+    this._checkCombatCleared();
     this.updateUI();
   }
 
   handlePlayerDeath() {
-    // Return to town, lose some gold
     const lostGold = Math.floor(this.levelSystem.gold * 0.1);
     this.levelSystem.gold -= lostGold;
 
@@ -743,14 +877,12 @@ export class DungeonScene extends Phaser.Scene {
     });
   }
 
+  // ===================== HELPERS =====================
+
   showPopup(x, y, text, color) {
     const popup = this.add.text(x, y, text, {
-      fontSize: '12px',
-      fill: color,
-      fontFamily: 'monospace',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 2,
+      fontSize: '12px', fill: color, fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(25);
 
     this.tweens.add({
@@ -763,7 +895,7 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   updateUI() {
-    // Emit to UI scene
+    if (!this.player) return;
     this.scene.get('UIScene').events.emit('updateStats', {
       hp: this.player.hp,
       maxHp: this.player.getMaxHP(),
@@ -776,92 +908,6 @@ export class DungeonScene extends Phaser.Scene {
       location: 'dungeon',
       inventory: this.inventory.getItems(),
     });
-  }
-
-  checkStairsOverlap(justPressedE) {
-    if (!this.stairs || !this.player || !this.stairs.visible) return;
-
-    const dist = Phaser.Math.Distance.Between(
-      this.player.x, this.player.y,
-      this.stairs.x, this.stairs.y
-    );
-
-    if (dist < this.tileSize) {
-      // Show prompt
-      if (!this.stairsPrompt) {
-        this.stairsPrompt = this.add.text(this.stairs.x, this.stairs.y - 20, 'Press E to descend', {
-          fontSize: '10px',
-          fill: '#ffffff',
-          fontFamily: 'monospace',
-          stroke: '#000000',
-          strokeThickness: 2,
-        }).setOrigin(0.5).setDepth(20);
-      }
-
-      if (justPressedE) {
-        this.goToNextFloor();
-      }
-    } else if (this.stairsPrompt) {
-      this.stairsPrompt.destroy();
-      this.stairsPrompt = null;
-    }
-  }
-
-  goToNextFloor() {
-    this.scene.restart({ floor: this.currentFloor + 1 });
-  }
-
-  /** Called from UIScene when the touch E button is pressed */
-  handleTouchInteract() {
-    if (!this.player || !this.player.active) return;
-
-    // Check doors
-    for (const door of this.doors) {
-      if (door.state !== 'closed') continue;
-
-      const doorWorldX = door.tileX * this.tileSize + this.tileSize / 2;
-      const doorWorldY = door.tileY * this.tileSize + this.tileSize / 2;
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, doorWorldX, doorWorldY
-      );
-
-      if (dist < this.tileSize * 1.5) {
-        this.openDoor(door);
-        return;
-      }
-    }
-
-    // Check crafting bench
-    if (this.craftingBench) {
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y,
-        this.craftingBench.x, this.craftingBench.y
-      );
-      if (dist < this.tileSize * 1.5) {
-        this.showPopup(this.craftingBench.x, this.craftingBench.y - 30,
-          'Crafting recipes coming soon!', '#ffdd44');
-        return;
-      }
-    }
-
-    // Check stairs
-    if (this.stairs && this.stairs.visible) {
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y,
-        this.stairs.x, this.stairs.y
-      );
-      if (dist < this.tileSize) {
-        this.goToNextFloor();
-      }
-    }
-  }
-
-  updateMinimap() {
-    if (!this.minimapPlayerDot || !this.player) return;
-    const tileX = Math.floor(this.player.x / this.tileSize);
-    const tileY = Math.floor(this.player.y / this.tileSize);
-    this.minimapPlayerDot.x = this.mmOffsetX + tileX * this.mmScale + this.mmScale / 2;
-    this.minimapPlayerDot.y = this.mmOffsetY + tileY * this.mmScale + this.mmScale / 2;
   }
 
   findNearestEnemyInRange() {
@@ -884,11 +930,9 @@ export class DungeonScene extends Phaser.Scene {
     if (this.player && this.player.active) {
       this.player.update(time, delta);
       this.checkInteractions();
-      this.checkRoomEntry();
-      this.updateMinimap();
       this.updateUI();
 
-      // Auto-attack: while in combat mode, attack nearest enemy in range
+      // Auto-attack
       if (this.player.autoRetaliateTimer > 0 && !this.player.isAttacking && this.player.attackCooldown <= 0) {
         const nearest = this.findNearestEnemyInRange();
         if (nearest) {
