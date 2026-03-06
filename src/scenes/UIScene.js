@@ -321,7 +321,7 @@ export class UIScene extends Phaser.Scene {
   _setupSwipeGesture() {
     this.input.on('pointerdown', (pointer) => {
       // Only track swipes on the right 40% of the screen
-      // and ignore pointers already claimed by joystick or buttons
+      // and ignore pointers already claimed by the joystick
       if (pointer.id === this.joystickPointerId) return;
       if (pointer.x < this.scale.width * 0.6) return;
       this._swipeStart = { x: pointer.x, y: pointer.y, time: pointer.downTime, id: pointer.id };
