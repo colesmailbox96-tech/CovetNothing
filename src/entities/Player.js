@@ -48,7 +48,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   takeDamage(amount, attackerX, attackerY) {
     if (this.invulnerable) return;
 
-    this.hp -= amount;
+    const defense = this.levelSystem.getDefense ? this.levelSystem.getDefense() : 0;
+    const mitigated = Math.max(1, amount - defense);
+    this.hp -= mitigated;
     this.invulnerable = true;
     this.invulnerableTimer = 500;
 
