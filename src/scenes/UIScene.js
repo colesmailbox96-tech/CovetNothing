@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 
+const JOYSTICK_DEAD_ZONE = 0.15;
+
 export class UIScene extends Phaser.Scene {
   constructor() {
     super('UIScene');
@@ -15,9 +17,11 @@ export class UIScene extends Phaser.Scene {
     };
 
     this.showInventory = false;
-    this.isTouchDevice = this.input.activePointer.wasTouch
-      || ('ontouchstart' in window)
-      || (navigator.maxTouchPoints > 0);
+    // Detect touch-primary devices (mobile/tablet) using coarse pointer check
+    // to avoid showing touch controls on desktop touchscreen laptops
+    const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const hasTouchAPI = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    this.isTouchDevice = hasCoarsePointer && hasTouchAPI;
 
     // Touch input state (joystick vector, shared with Player via registry)
     this.touchMoveX = 0;
@@ -51,11 +55,22 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  /** Get the player from the currently active game scene */
+  getActivePlayer() {
+    const dungeonScene = this.scene.get('DungeonScene');
+    if (dungeonScene && dungeonScene.scene.isActive() && dungeonScene.player) {
+      return dungeonScene.player;
+    }
+    const townScene = this.scene.get('TownScene');
+    if (townScene && townScene.scene.isActive() && townScene.player) {
+      return townScene.player;
+    }
+    return null;
+  }
+
   /** Push joystick vector to the active game scene's player */
   syncTouchInput() {
-    const activeScene = this.scene.get('DungeonScene');
-    const townScene = this.scene.get('TownScene');
-    const player = (activeScene && activeScene.player) || (townScene && townScene.player);
+    const player = this.getActivePlayer();
     if (player) {
       player.touchMoveX = this.touchMoveX;
       player.touchMoveY = this.touchMoveY;
@@ -138,12 +153,11 @@ export class UIScene extends Phaser.Scene {
 
     this.joyKnob.setPosition(base.x + nx, base.y + ny);
 
-    // Normalize to -1..1 range with a small dead zone
-    const deadZone = 0.15;
+    // Normalize to -1..1 range with dead zone
     const normX = nx / maxDist;
     const normY = ny / maxDist;
-    this.touchMoveX = Math.abs(normX) > deadZone ? normX : 0;
-    this.touchMoveY = Math.abs(normY) > deadZone ? normY : 0;
+    this.touchMoveX = Math.abs(normX) > JOYSTICK_DEAD_ZONE ? normX : 0;
+    this.touchMoveY = Math.abs(normY) > JOYSTICK_DEAD_ZONE ? normY : 0;
 
     this.syncTouchInput();
   }
@@ -203,22 +217,20 @@ export class UIScene extends Phaser.Scene {
   }
 
   emitTouchAction(action) {
-    // Send action to the currently active game scene
-    const dungeonScene = this.scene.get('DungeonScene');
-    const townScene = this.scene.get('TownScene');
-
     if (action === 'attack') {
-      // Trigger attack on the player in the active scene
-      const player = (dungeonScene && dungeonScene.player) || (townScene && townScene.player);
+      const player = this.getActivePlayer();
       if (player && player.active) {
         player.tryAttack();
       }
     } else if (action === 'interact') {
-      // Simulate E key press in the active game scene
+      const dungeonScene = this.scene.get('DungeonScene');
       if (dungeonScene && dungeonScene.scene.isActive()) {
         dungeonScene.handleTouchInteract();
-      } else if (townScene && townScene.scene.isActive()) {
-        townScene.handleTouchInteract();
+      } else {
+        const townScene = this.scene.get('TownScene');
+        if (townScene && townScene.scene.isActive()) {
+          townScene.handleTouchInteract();
+        }
       }
     }
   }
