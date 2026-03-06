@@ -18,7 +18,7 @@ export class DungeonGenerator {
     const w = roomNode.width;
     const h = roomNode.height;
 
-    // Initialise map (all walls)
+    // Initialize map (all walls)
     const map = [];
     for (let y = 0; y < h; y++) {
       map[y] = [];

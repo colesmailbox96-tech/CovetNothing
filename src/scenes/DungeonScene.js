@@ -32,6 +32,7 @@ export class DungeonScene extends Phaser.Scene {
     this.roomEnemies = {};
     this.waveQueue = [];     // remaining waves for active combat room
     this.waveActive = false;
+    this.waveSpawning = false;
 
     // Create tile textures (same as before)
     this.createTileTextures();
@@ -273,6 +274,7 @@ export class DungeonScene extends Phaser.Scene {
     this.roomEnemies = {};
     this.waveQueue = [];
     this.waveActive = false;
+    this.waveSpawning = false;
 
     // Doors
     this.doorGroup.clear(true, true);
@@ -476,6 +478,7 @@ export class DungeonScene extends Phaser.Scene {
 
   _checkCombatCleared() {
     if (this.activeCombatRoom < 0) return;
+    if (this.waveSpawning) return; // prevent rapid successive wave spawns
     const roomId = this.activeCombatRoom;
     const alive = (this.roomEnemies[roomId] || []).filter(
       e => e.active && e.state !== 'dead'
@@ -483,7 +486,11 @@ export class DungeonScene extends Phaser.Scene {
 
     // Wave threshold: spawn next wave when few enemies remain
     if (alive.length <= GAME_CONFIG.WAVE_THRESHOLD && this.waveQueue.length > 0) {
-      this._spawnNextWave(roomId);
+      this.waveSpawning = true;
+      this.time.delayedCall(500, () => {
+        this._spawnNextWave(roomId);
+        this.waveSpawning = false;
+      });
       return;
     }
 
@@ -675,7 +682,7 @@ export class DungeonScene extends Phaser.Scene {
       }
     }
 
-    // Normalise so min row/col = 0
+    // Normalize so min row/col = 0
     const rows = Object.values(positions).map(p => p.row);
     const cols = Object.values(positions).map(p => p.col);
     const minR = Math.min(...rows);

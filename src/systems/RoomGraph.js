@@ -36,16 +36,16 @@ export class RoomGraph {
     // Use a simple spanning-tree approach then add optional extra edges
     // so most rooms have 2-3 exits.
     const connected = new Set([0]);
-    const frontier = [0]; // rooms that can still accept children
+    const availableParents = [0]; // rooms that can still accept new connections
 
     for (let i = 1; i < rooms.length; i++) {
-      // pick a random frontier room that has < 3 edges
+      // pick a random available parent room that has < 3 edges
       let parentIdx;
-      const validFrontier = frontier.filter(
+      const validParents = availableParents.filter(
         f => rooms[f].doors.length < 3
       );
-      if (validFrontier.length > 0) {
-        parentIdx = validFrontier[Math.floor(Math.random() * validFrontier.length)];
+      if (validParents.length > 0) {
+        parentIdx = validParents[Math.floor(Math.random() * validParents.length)];
       } else {
         // fallback: pick any connected room with fewest edges
         parentIdx = [...connected].reduce((a, b) =>
@@ -61,12 +61,12 @@ export class RoomGraph {
       rooms[i].doors.push({ edgeId, targetRoom: parentIdx });
 
       connected.add(i);
-      frontier.push(i);
+      availableParents.push(i);
 
-      // remove parent from frontier when full
+      // remove parent from available list when full
       if (rooms[parentIdx].doors.length >= 3) {
-        const idx = frontier.indexOf(parentIdx);
-        if (idx !== -1) frontier.splice(idx, 1);
+        const idx = availableParents.indexOf(parentIdx);
+        if (idx !== -1) availableParents.splice(idx, 1);
       }
     }
 

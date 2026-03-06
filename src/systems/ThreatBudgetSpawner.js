@@ -51,8 +51,8 @@ export class ThreatBudgetSpawner {
 
     // Split into waves (1 for small groups, up to 3 for larger)
     const waveCount = spawns.length <= 2 ? 1
-                    : spawns.length <= 4 ? Phaser_randomInt(1, 2)
-                    : Phaser_randomInt(2, 3);
+                    : spawns.length <= 4 ? randomInt(1, 2)
+                    : randomInt(2, 3);
 
     const waves = Array.from({ length: waveCount }, () => []);
     spawns.forEach((s, i) => waves[i % waveCount].push(s));
@@ -62,6 +62,6 @@ export class ThreatBudgetSpawner {
 }
 
 /** Simple random integer without depending on Phaser at module scope */
-function Phaser_randomInt(min, max) {
+function randomInt(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
