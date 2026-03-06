@@ -50,8 +50,8 @@ export class ThreatBudgetSpawner {
     }
 
     // Split into waves (1 for small groups, up to 3 for larger)
-    const waveCount = spawns.length <= 2 ? 1
-                    : spawns.length <= 4 ? randomInt(1, 2)
+    const waveCount = spawns.length <= 10 ? 1
+                    : spawns.length <= 20 ? randomInt(1, 2)
                     : randomInt(2, 3);
 
     const waves = Array.from({ length: waveCount }, () => []);
