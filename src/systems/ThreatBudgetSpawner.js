@@ -42,7 +42,7 @@ export class ThreatBudgetSpawner {
 
     while (spent < budget && spawns.length < maxEnemies) {
       // Pick an affordable enemy
-      const affordable = pool.filter(e => e.threat + spent <= budget || spawns.length === 0);
+      const affordable = pool.filter(e => e.threat + spent <= budget);
       if (affordable.length === 0) break;
       const pick = affordable[Math.floor(Math.random() * affordable.length)];
       spawns.push({ type: pick.type });
