@@ -23,4 +23,82 @@ export const ITEM_DATA = {
     stackable: true,
     type: 'material',
   },
+
+  // Equipment - Weapons
+  'bone-club': {
+    name: 'Bone Club',
+    description: 'A crude weapon fashioned from bones.',
+    icon: 'item-bone-club',
+    sellPrice: 12,
+    stackable: false,
+    type: 'weapon',
+    stats: { attack: 3 },
+  },
+  'widow-fang-dagger': {
+    name: 'Widow Fang Dagger',
+    description: 'A sharp blade carved from widow fangs.',
+    icon: 'item-widow-fang-dagger',
+    sellPrice: 30,
+    stackable: false,
+    type: 'weapon',
+    stats: { attack: 6 },
+  },
+  'beetle-shell-sword': {
+    name: 'Beetle Shell Sword',
+    description: 'A sturdy sword reinforced with polished beetle shell.',
+    icon: 'item-beetle-shell-sword',
+    sellPrice: 50,
+    stackable: false,
+    type: 'weapon',
+    stats: { attack: 10 },
+  },
+
+  // Equipment - Armor
+  'bone-mail': {
+    name: 'Bone Mail',
+    description: 'Light armor woven from skeletal remains.',
+    icon: 'item-bone-mail',
+    sellPrice: 15,
+    stackable: false,
+    type: 'armor',
+    stats: { defense: 3, maxHp: 15 },
+  },
+  'widow-silk-robe': {
+    name: 'Widow Silk Robe',
+    description: 'A protective robe spun from widow silk.',
+    icon: 'item-widow-silk-robe',
+    sellPrice: 35,
+    stackable: false,
+    type: 'armor',
+    stats: { defense: 5, maxHp: 25 },
+  },
+  'beetle-carapace': {
+    name: 'Beetle Carapace',
+    description: 'Heavy armor crafted from beetle shells.',
+    icon: 'item-beetle-carapace',
+    sellPrice: 55,
+    stackable: false,
+    type: 'armor',
+    stats: { defense: 8, maxHp: 40 },
+  },
+
+  // Consumables
+  'health-potion': {
+    name: 'Health Potion',
+    description: 'Restores 40 HP.',
+    icon: 'item-health-potion',
+    sellPrice: 8,
+    stackable: true,
+    type: 'consumable',
+    effect: { heal: 40 },
+  },
+  'greater-health-potion': {
+    name: 'Greater Health Potion',
+    description: 'Restores 80 HP.',
+    icon: 'item-greater-health-potion',
+    sellPrice: 20,
+    stackable: true,
+    type: 'consumable',
+    effect: { heal: 80 },
+  },
 };
