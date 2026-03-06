@@ -559,8 +559,8 @@ export class DungeonScene extends Phaser.Scene {
     const positions = this._layoutGraph();
 
     // Background
-    const maxX = Math.max(...Object.values(positions).map(p => p.col)) + 1;
-    const maxY = Math.max(...Object.values(positions).map(p => p.row)) + 1;
+    const maxX = Object.values(positions).reduce((m, p) => Math.max(m, p.col), 0) + 1;
+    const maxY = Object.values(positions).reduce((m, p) => Math.max(m, p.row), 0) + 1;
     g.fillStyle(0x000000, 0.6);
     g.fillRect(offsetX - 4, offsetY - 4, maxX * gap + 8, maxY * gap + 8);
 
