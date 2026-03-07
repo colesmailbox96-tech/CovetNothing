@@ -45,6 +45,17 @@ export const GAME_CONFIG = {
 
   // Room types: normal, elite, treasure, merchant, rest, boss
   ROOM_TYPES: ['normal', 'elite', 'treasure', 'merchant', 'rest', 'boss'],
+
+  // Traps
+  TRAP_BASE_DAMAGE: 5,
+  TRAP_DAMAGE_PER_FLOOR: 2,
+  TRAP_COOLDOWN: 3000,           // ms before a trap can re-trigger
+  TRAP_BASE_COUNT: 1,            // minimum traps per combat room
+  TRAP_COUNT_PER_FLOOR: 0.5,    // extra traps per floor (fractional, floored)
+
+  // Critical hits
+  CRIT_CHANCE: 0.15,             // 15 % chance per attack
+  CRIT_MULTIPLIER: 1.5,          // 1.5× damage on crit
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];

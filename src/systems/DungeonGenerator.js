@@ -11,8 +11,8 @@ import { GAME_CONFIG } from '../config.js';
 export class DungeonGenerator {
   /**
    * @param {object}  roomNode – from RoomGraph (id, type, width, height, doors)
-   * @param {object}  opts     – { hasStairs: bool, hasCraftingBench: bool }
-   * @returns {{ map, width, height, doorPositions, spawnPos, stairsPos, craftingBenchPos, obstacles }}
+   * @param {object}  opts     – { hasStairs: bool, hasCraftingBench: bool, floor: number }
+   * @returns {{ map, width, height, doorPositions, spawnPos, stairsPos, craftingBenchPos, obstacles, trapPositions }}
    */
   static generateRoom(roomNode, opts = {}) {
     const w = roomNode.width;
@@ -80,6 +80,30 @@ export class DungeonGenerator {
       craftingBenchPos = { x: bx, y: by };
     }
 
+    // --- Trap placement (combat rooms only) ---
+    const trapPositions = [];
+    if ((roomNode.type === 'normal' || roomNode.type === 'elite' || roomNode.type === 'boss') && opts.floor) {
+      const trapCount = Math.floor(
+        GAME_CONFIG.TRAP_BASE_COUNT + (opts.floor - 1) * GAME_CONFIG.TRAP_COUNT_PER_FLOOR
+      );
+      for (let i = 0; i < trapCount; i++) {
+        let tx, ty, attempts = 0;
+        do {
+          tx = Phaser.Math.Between(3, w - 4);
+          ty = Phaser.Math.Between(3, h - 4);
+          attempts++;
+        } while (
+          (map[ty][tx] !== 0 ||
+           (tx === spawnPos.x && ty === spawnPos.y) ||
+           trapPositions.some(tp => tp.x === tx && tp.y === ty)) &&
+          attempts < 20
+        );
+        if (map[ty][tx] === 0) {
+          trapPositions.push({ x: tx, y: ty });
+        }
+      }
+    }
+
     return {
       map,
       width: w,
@@ -89,6 +113,7 @@ export class DungeonGenerator {
       stairsPos,
       craftingBenchPos,
       obstacles,
+      trapPositions,
     };
   }
 
