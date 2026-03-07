@@ -1,4 +1,27 @@
 export const ENEMY_DATA = {
+  'dust-wraith': {
+    name: 'Dust Wraith',
+    hp: 20,
+    attack: 6,
+    speed: 70,
+    chaseSpeed: 130,
+    aggroRange: 180,
+    attackRange: 35,
+    attackCooldown: 800,
+    spriteSize: 64,
+    gold: { min: 2, max: 6 },
+    exp: 12,
+    threatValue: 2,
+    drops: [
+      { itemId: 'temple-ash', chance: 0.4 },
+      { itemId: 'polished-beetle-eye', chance: 0.1 },
+    ],
+    animations: {
+      idle: { frames: 1, prefix: 'dust-wraith-idle' },
+      walk: { frames: 1, prefix: 'dust-wraith-walk' },
+      attack: { frames: 1, prefix: 'dust-wraith-attack' },
+    },
+  },
   'weeping-widow': {
     name: 'Weeping Widow',
     hp: 55,

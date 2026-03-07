@@ -99,6 +99,12 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // Generate procedural textures for Dust Wraith
+    this.generateDustWraithTextures();
+
+    // Generate decoration textures
+    this.generateDecorationTextures();
+
     // Create all animations
     this.createPlayerAnimations();
     this.createEnemyAnimations('weeping-widow', { idle: 4, walk: 6, attack: 4 });
@@ -155,5 +161,105 @@ export class BootScene extends Phaser.Scene {
         });
       }
     }
+  }
+
+  /** Procedurally generate Dust Wraith textures (ghostly floating specter) */
+  generateDustWraithTextures() {
+    const size = 64;
+    const g = this.add.graphics();
+
+    for (const dir of DIRS) {
+      g.clear();
+
+      // Outer glow
+      g.fillStyle(0x6644aa, 0.15);
+      g.fillCircle(size / 2, size / 2, 28);
+
+      // Body — translucent purple-blue oval
+      g.fillStyle(0x7755cc, 0.6);
+      g.fillEllipse(size / 2, size / 2 + 2, 30, 36);
+
+      // Inner glow
+      g.fillStyle(0x9977ee, 0.4);
+      g.fillEllipse(size / 2, size / 2, 20, 26);
+
+      // Core
+      g.fillStyle(0xbbaaff, 0.5);
+      g.fillEllipse(size / 2, size / 2 - 2, 12, 16);
+
+      // Eyes (two small bright dots, offset based on direction)
+      const eyeOffsets = {
+        'south':      [{ x: -5, y: -3 }, { x: 5, y: -3 }],
+        'north':      [{ x: -5, y: -3 }, { x: 5, y: -3 }],
+        'east':       [{ x: 2, y: -4 }, { x: 2, y: 2 }],
+        'west':       [{ x: -2, y: -4 }, { x: -2, y: 2 }],
+        'south-east': [{ x: 0, y: -3 }, { x: 6, y: -1 }],
+        'south-west': [{ x: -6, y: -1 }, { x: 0, y: -3 }],
+        'north-east': [{ x: 0, y: -3 }, { x: 6, y: -1 }],
+        'north-west': [{ x: -6, y: -1 }, { x: 0, y: -3 }],
+      };
+      const eyes = eyeOffsets[dir] || eyeOffsets['south'];
+      g.fillStyle(0xffffff, 0.9);
+      g.fillCircle(size / 2 + eyes[0].x, size / 2 + eyes[0].y, 3);
+      g.fillCircle(size / 2 + eyes[1].x, size / 2 + eyes[1].y, 3);
+      g.fillStyle(0xcc44ff, 1);
+      g.fillCircle(size / 2 + eyes[0].x, size / 2 + eyes[0].y, 1.5);
+      g.fillCircle(size / 2 + eyes[1].x, size / 2 + eyes[1].y, 1.5);
+
+      // Wispy tail at bottom
+      g.fillStyle(0x6644aa, 0.3);
+      g.fillTriangle(
+        size / 2 - 10, size / 2 + 14,
+        size / 2 + 10, size / 2 + 14,
+        size / 2, size / 2 + 30
+      );
+
+      g.generateTexture(`dust-wraith-idle-${dir}-0`, size, size);
+    }
+    g.destroy();
+  }
+
+  /** Procedurally generate decoration textures for dungeon rooms */
+  generateDecorationTextures() {
+    const g = this.add.graphics();
+
+    // Wall torch (16x16)
+    g.clear();
+    // Bracket
+    g.fillStyle(0x666666, 1);
+    g.fillRect(6, 8, 4, 8);
+    // Flame
+    g.fillStyle(0xff6600, 0.9);
+    g.fillRect(4, 2, 8, 8);
+    g.fillStyle(0xffaa00, 0.8);
+    g.fillRect(5, 3, 6, 5);
+    g.fillStyle(0xffdd44, 0.7);
+    g.fillRect(6, 4, 4, 3);
+    g.generateTexture('deco-torch', 16, 16);
+    g.clear();
+
+    // Floor debris (16x16)
+    g.fillStyle(0x444444, 0.6);
+    g.fillRect(2, 6, 5, 3);
+    g.fillRect(8, 4, 4, 4);
+    g.fillRect(5, 10, 6, 3);
+    g.fillStyle(0x555555, 0.4);
+    g.fillRect(10, 9, 3, 3);
+    g.fillRect(1, 11, 3, 2);
+    g.generateTexture('deco-debris', 16, 16);
+    g.clear();
+
+    // Pillar / column (16x24) - visual decoration near walls
+    g.fillStyle(0x4a3a5a, 1);
+    g.fillRect(3, 0, 10, 24);
+    g.fillStyle(0x5a4a6a, 0.8);
+    g.fillRect(4, 1, 8, 3);
+    g.fillRect(4, 20, 8, 3);
+    g.fillStyle(0x3a2a4a, 0.6);
+    g.fillRect(7, 0, 2, 24);
+    g.generateTexture('deco-pillar', 16, 24);
+    g.clear();
+
+    g.destroy();
   }
 }

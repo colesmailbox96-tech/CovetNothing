@@ -104,6 +104,53 @@ export class DungeonGenerator {
       }
     }
 
+    // --- Decoration placement (torches along walls, debris on floor) ---
+    const decorations = [];
+    const torchCount = Phaser.Math.Between(
+      GAME_CONFIG.TORCH_COUNT_MIN, GAME_CONFIG.TORCH_COUNT_MAX
+    );
+    for (let i = 0; i < torchCount; i++) {
+      let dx, dy, attempts = 0;
+      do {
+        // Pick a floor tile adjacent to a wall (y=1 or y=h-2, or x=1 or x=w-2)
+        const side = Phaser.Math.Between(0, 3);
+        if (side === 0)      { dx = Phaser.Math.Between(2, w - 3); dy = 1; }
+        else if (side === 1) { dx = Phaser.Math.Between(2, w - 3); dy = h - 2; }
+        else if (side === 2) { dx = 1;     dy = Phaser.Math.Between(2, h - 3); }
+        else                 { dx = w - 2; dy = Phaser.Math.Between(2, h - 3); }
+        attempts++;
+      } while (
+        (map[dy][dx] !== 0 ||
+         decorations.some(d => d.x === dx && d.y === dy) ||
+         (dx === spawnPos.x && dy === spawnPos.y)) &&
+        attempts < 20
+      );
+      if (map[dy][dx] === 0) {
+        decorations.push({ x: dx, y: dy, type: 'torch' });
+      }
+    }
+
+    const debrisCount = Phaser.Math.Between(
+      GAME_CONFIG.DEBRIS_COUNT_MIN, GAME_CONFIG.DEBRIS_COUNT_MAX
+    );
+    for (let i = 0; i < debrisCount; i++) {
+      let dx, dy, attempts = 0;
+      do {
+        dx = Phaser.Math.Between(3, w - 4);
+        dy = Phaser.Math.Between(3, h - 4);
+        attempts++;
+      } while (
+        (map[dy][dx] !== 0 ||
+         decorations.some(d => d.x === dx && d.y === dy) ||
+         trapPositions.some(tp => tp.x === dx && tp.y === dy) ||
+         (dx === spawnPos.x && dy === spawnPos.y)) &&
+        attempts < 20
+      );
+      if (map[dy][dx] === 0) {
+        decorations.push({ x: dx, y: dy, type: 'debris' });
+      }
+    }
+
     return {
       map,
       width: w,
@@ -114,6 +161,7 @@ export class DungeonGenerator {
       craftingBenchPos,
       obstacles,
       trapPositions,
+      decorations,
     };
   }
 
