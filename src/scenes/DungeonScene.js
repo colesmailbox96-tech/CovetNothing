@@ -368,6 +368,12 @@ export class DungeonScene extends Phaser.Scene {
       this._createTraps(roomData.trapPositions);
     }
 
+    // Decorations
+    this.decorations = [];
+    if (roomData.decorations && roomData.decorations.length > 0) {
+      this._createDecorations(roomData.decorations);
+    }
+
     // Doors
     this.doors = [];
     this._createDoors(node, roomData);
@@ -473,6 +479,15 @@ export class DungeonScene extends Phaser.Scene {
     }
     this.traps = [];
 
+    // Decorations
+    if (this.decorations) {
+      for (const deco of this.decorations) {
+        if (deco.sprite) deco.sprite.destroy();
+        if (deco.glow) deco.glow.destroy();
+      }
+    }
+    this.decorations = [];
+
     // Wall visuals stored separately
     if (this._wallImages) {
       for (const img of this._wallImages) img.destroy();
@@ -482,6 +497,9 @@ export class DungeonScene extends Phaser.Scene {
 
   /** Build floor + wall tiles from roomData.map */
   _buildTilemap(roomData) {
+    // Progressive floor tint: deeper floors get darker / more ominous
+    const floorTint = this._getFloorTint();
+
     for (let y = 0; y < roomData.height; y++) {
       for (let x = 0; x < roomData.width; x++) {
         const px = x * this.tileSize + this.tileSize / 2;
@@ -490,12 +508,14 @@ export class DungeonScene extends Phaser.Scene {
 
         if (tile === 0 || tile === 2) {
           const floor = this.add.image(px, py, 'dungeon-floor').setDepth(0);
+          if (floorTint !== null) floor.setTint(floorTint);
           this.floorGroup.add(floor);
         }
         if (tile === 1) {
           // Only add wall physics if adjacent to a floor tile
           if (this._isAdjacentToFloor(roomData.map, x, y)) {
             const wallImg = this.add.image(px, py, 'tile-wall').setDepth(1);
+            if (floorTint !== null) wallImg.setTint(floorTint);
             this._wallImages.push(wallImg);
 
             const wall = this.physics.add.staticImage(px, py, 'tile-wall');
@@ -505,6 +525,35 @@ export class DungeonScene extends Phaser.Scene {
           }
         }
       }
+    }
+  }
+
+  /** Return a tint color based on current floor depth, or null for floor 1 */
+  _getFloorTint() {
+    if (this.currentFloor <= 1) return null;
+    // Gradual shift: floors 2-4 blue-gray, 5-7 green-tinged, 8+ reddish
+    const depth = Math.min(this.currentFloor, 10);
+    if (depth <= 4) {
+      // Cool blue-gray tint (progressively darker)
+      const intensity = 1 - (depth - 1) * 0.06;
+      const r = Math.floor(intensity * 0.85 * 255);
+      const g = Math.floor(intensity * 0.88 * 255);
+      const b = Math.floor(intensity * 255);
+      return (r << 16) | (g << 8) | b;
+    } else if (depth <= 7) {
+      // Eerie green tint
+      const intensity = 1 - (depth - 1) * 0.05;
+      const r = Math.floor(intensity * 0.8 * 255);
+      const g = Math.floor(intensity * 0.95 * 255);
+      const b = Math.floor(intensity * 0.75 * 255);
+      return (r << 16) | (g << 8) | b;
+    } else {
+      // Deep crimson tint
+      const intensity = 1 - (depth - 1) * 0.04;
+      const r = Math.floor(intensity * 255);
+      const g = Math.floor(intensity * 0.7 * 255);
+      const b = Math.floor(intensity * 0.7 * 255);
+      return (r << 16) | (g << 8) | b;
     }
   }
 
@@ -787,6 +836,40 @@ export class DungeonScene extends Phaser.Scene {
         cooldown: 0,        // ready to trigger
         active: false,
       });
+    }
+  }
+
+  _createDecorations(decoList) {
+    for (const deco of decoList) {
+      const dx = deco.x * this.tileSize + this.tileSize / 2;
+      const dy = deco.y * this.tileSize + this.tileSize / 2;
+
+      if (deco.type === 'torch') {
+        const sprite = this.add.image(dx, dy, 'deco-torch').setDepth(2);
+        // Ambient glow circle
+        const glow = this.add.circle(dx, dy, 24, 0xff8800, 0.08).setDepth(0);
+        this.tweens.add({
+          targets: glow,
+          alpha: { from: 0.04, to: 0.1 },
+          scaleX: { from: 0.9, to: 1.1 },
+          scaleY: { from: 0.9, to: 1.1 },
+          yoyo: true,
+          repeat: -1,
+          duration: 600 + Math.random() * 400,
+        });
+        // Flicker the torch sprite
+        this.tweens.add({
+          targets: sprite,
+          scaleY: { from: 0.95, to: 1.05 },
+          yoyo: true,
+          repeat: -1,
+          duration: 300 + Math.random() * 200,
+        });
+        this.decorations.push({ sprite, glow });
+      } else if (deco.type === 'debris') {
+        const sprite = this.add.image(dx, dy, 'deco-debris').setDepth(1).setAlpha(0.7);
+        this.decorations.push({ sprite, glow: null });
+      }
     }
   }
 
