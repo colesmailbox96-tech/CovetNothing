@@ -101,4 +101,22 @@ export const ITEM_DATA = {
     type: 'consumable',
     effect: { heal: 80 },
   },
+  'strength-potion': {
+    name: 'Strength Potion',
+    description: 'Increases attack by 5 for 15 seconds.',
+    icon: 'item-strength-potion',
+    sellPrice: 12,
+    stackable: true,
+    type: 'consumable',
+    effect: { buff: 'strength_boost', duration: 15000, magnitude: 5 },
+  },
+  'speed-potion': {
+    name: 'Speed Potion',
+    description: 'Increases movement speed by 50% for 10 seconds.',
+    icon: 'item-speed-potion',
+    sellPrice: 12,
+    stackable: true,
+    type: 'consumable',
+    effect: { buff: 'speed_boost', duration: 10000, magnitude: 0.5 },
+  },
 };

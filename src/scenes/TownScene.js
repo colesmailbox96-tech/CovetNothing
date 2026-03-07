@@ -6,6 +6,8 @@ import { LevelSystem } from '../systems/LevelSystem.js';
 import { Inventory } from '../systems/LootSystem.js';
 import { EquipmentSystem } from '../systems/EquipmentSystem.js';
 import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
+import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
+import { RunStats } from '../systems/RunStats.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -19,12 +21,26 @@ export class TownScene extends Phaser.Scene {
       this.registry.set('equipmentSystem', this.equipmentSystem);
     }
 
+    this.statusEffects = this.registry.get('statusEffects');
+    if (!this.statusEffects) {
+      this.statusEffects = new StatusEffectSystem();
+      this.registry.set('statusEffects', this.statusEffects);
+    }
+    // Clear any lingering buffs when returning to town
+    this.statusEffects.clear();
+
+    this.runStats = this.registry.get('runStats');
+    if (!this.runStats) {
+      this.runStats = new RunStats();
+      this.registry.set('runStats', this.runStats);
+    }
+
     this.levelSystem = this.registry.get('levelSystem');
     this.inventory = this.registry.get('inventory');
 
     // Initialize systems if first load
     if (!this.levelSystem) {
-      this.levelSystem = new LevelSystem(this.equipmentSystem);
+      this.levelSystem = new LevelSystem(this.equipmentSystem, this.statusEffects);
       this.inventory = new Inventory();
       this.registry.set('levelSystem', this.levelSystem);
       this.registry.set('inventory', this.inventory);
@@ -33,6 +49,9 @@ export class TownScene extends Phaser.Scene {
     // Link equipment to a levelSystem that was created before this system existed
     if (!this.levelSystem.equipmentSystem) {
       this.levelSystem.equipmentSystem = this.equipmentSystem;
+    }
+    if (!this.levelSystem.statusEffects) {
+      this.levelSystem.statusEffects = this.statusEffects;
     }
   }
 

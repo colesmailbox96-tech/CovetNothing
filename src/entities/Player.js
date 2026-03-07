@@ -54,6 +54,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.invulnerable = true;
     this.invulnerableTimer = 500;
 
+    // Notify scene of damage taken (for run stats)
+    this.scene.events.emit('playerDamageTaken', mitigated);
+
     // Haptic feedback on taking damage
     if (navigator.vibrate) navigator.vibrate(30);
 
@@ -153,7 +156,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Movement
     let vx = 0;
     let vy = 0;
-    const speed = GAME_CONFIG.PLAYER_SPEED;
+    let speed = GAME_CONFIG.PLAYER_SPEED;
+    // Apply speed buff from status effects
+    if (this.levelSystem.statusEffects) {
+      speed *= this.levelSystem.statusEffects.getSpeedMultiplier();
+    }
 
     if (this.cursors.left.isDown || this.wasd.left.isDown) vx = -1;
     else if (this.cursors.right.isDown || this.wasd.right.isDown) vx = 1;
