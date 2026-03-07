@@ -17,6 +17,9 @@ export class RunStats {
     this.damageDealt = 0;
     this.damageTaken = 0;
     this.highestFloor = 1;
+    this.criticalHits = 0;
+    this.trapsTriggered = 0;
+    this.startTime = Date.now();
   }
 
   recordKill() {
@@ -54,6 +57,22 @@ export class RunStats {
     this.damageTaken += amount;
   }
 
+  recordCriticalHit() {
+    this.criticalHits++;
+  }
+
+  recordTrapTriggered() {
+    this.trapsTriggered++;
+  }
+
+  /** Get elapsed run time formatted as mm:ss */
+  getElapsedTime() {
+    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
   /** Return a summary object for the death screen */
   getSummary() {
     return {
@@ -65,6 +84,9 @@ export class RunStats {
       potionsUsed: this.potionsUsed,
       damageDealt: this.damageDealt,
       damageTaken: this.damageTaken,
+      criticalHits: this.criticalHits,
+      trapsTriggered: this.trapsTriggered,
+      elapsedTime: this.getElapsedTime(),
     };
   }
 }

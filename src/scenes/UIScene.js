@@ -926,6 +926,7 @@ export class UIScene extends Phaser.Scene {
       { itemId: 'greater-health-potion', price: 35 + floor * 3 },
       { itemId: 'strength-potion', price: 25 + floor * 2 },
       { itemId: 'speed-potion', price: 25 + floor * 2 },
+      { itemId: 'shield-potion', price: 30 + floor * 2 },
     ];
 
     const buyLabel = this.add.text(panelX + 10, yOffset, 'For Sale:', {
@@ -1036,7 +1037,7 @@ export class UIScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     const panelW = Math.min(280, width * 0.45);
-    const panelH = Math.min(280, height * 0.5);
+    const panelH = Math.min(330, height * 0.6);
     const panelX = width / 2 - panelW / 2;
     const panelY = height / 2 - panelH / 2;
 
@@ -1063,12 +1064,15 @@ export class UIScene extends Phaser.Scene {
     let yOffset = panelY + 38;
     const stats = [
       { label: 'Highest Floor', value: summary.highestFloor, color: '#ffffff' },
+      { label: 'Time', value: summary.elapsedTime, color: '#aaddff' },
       { label: 'Enemies Killed', value: summary.enemiesKilled, color: '#ff6644' },
+      { label: 'Critical Hits', value: summary.criticalHits, color: '#ffdd00' },
       { label: 'Rooms Cleared', value: summary.roomsCleared, color: '#44ff44' },
       { label: 'Gold Earned', value: `${summary.goldEarned}g`, color: '#ffaa00' },
       { label: 'Gold Lost', value: `-${goldLost}g`, color: '#ff4444' },
       { label: 'Items Found', value: summary.itemsFound, color: '#66aaff' },
       { label: 'Potions Used', value: summary.potionsUsed, color: '#44ff88' },
+      { label: 'Traps Triggered', value: summary.trapsTriggered, color: '#ff8844' },
       { label: 'Damage Dealt', value: summary.damageDealt, color: '#ffdd44' },
       { label: 'Damage Taken', value: summary.damageTaken, color: '#ff8844' },
     ];

@@ -269,6 +269,36 @@ export class DungeonScene extends Phaser.Scene {
     g.generateTexture('tile-merchant', ts, ts);
     g.clear();
 
+    // Spike trap (subtle floor marking)
+    g.fillStyle(0x2a2a2a, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.fillStyle(0x3a3a3a, 0.6);
+    g.fillRect(4, 4, ts - 8, ts - 8);
+    // Spike tips
+    g.fillStyle(0x888888, 0.5);
+    g.fillRect(8, 8, 4, 4);
+    g.fillRect(20, 8, 4, 4);
+    g.fillRect(14, 14, 4, 4);
+    g.fillRect(8, 20, 4, 4);
+    g.fillRect(20, 20, 4, 4);
+    g.generateTexture('tile-trap', ts, ts);
+    g.clear();
+
+    // Activated trap (red glow)
+    g.fillStyle(0x2a2a2a, 1);
+    g.fillRect(0, 0, ts, ts);
+    g.fillStyle(0x661111, 0.8);
+    g.fillRect(2, 2, ts - 4, ts - 4);
+    // Raised spikes
+    g.fillStyle(0xaaaaaa, 0.9);
+    g.fillRect(7, 6, 5, 8);
+    g.fillRect(19, 6, 5, 8);
+    g.fillRect(13, 12, 5, 8);
+    g.fillRect(7, 18, 5, 8);
+    g.fillRect(19, 18, 5, 8);
+    g.generateTexture('tile-trap-active', ts, ts);
+    g.clear();
+
     g.destroy();
   }
 
@@ -290,7 +320,7 @@ export class DungeonScene extends Phaser.Scene {
     const hasCraftingBench = isStartRoom;
 
     // Generate tilemap for this room
-    const roomData = DungeonGenerator.generateRoom(node, { hasStairs, hasCraftingBench });
+    const roomData = DungeonGenerator.generateRoom(node, { hasStairs, hasCraftingBench, floor: this.currentFloor });
     this.roomData = roomData;
 
     // Build tilemap visuals & physics
@@ -330,6 +360,12 @@ export class DungeonScene extends Phaser.Scene {
     this.merchantPrompt = null;
     if (node.type === 'merchant') {
       this._createMerchant(roomData);
+    }
+
+    // Traps
+    this.traps = [];
+    if (roomData.trapPositions && roomData.trapPositions.length > 0) {
+      this._createTraps(roomData.trapPositions);
     }
 
     // Doors
@@ -428,6 +464,14 @@ export class DungeonScene extends Phaser.Scene {
     if (this.merchant) { this.merchant.destroy(); this.merchant = null; }
     if (this.merchantPrompt) { this.merchantPrompt.destroy(); this.merchantPrompt = null; }
     if (this._merchantLabel) { this._merchantLabel.destroy(); this._merchantLabel = null; }
+
+    // Traps
+    if (this.traps) {
+      for (const trap of this.traps) {
+        if (trap.sprite) trap.sprite.destroy();
+      }
+    }
+    this.traps = [];
 
     // Wall visuals stored separately
     if (this._wallImages) {
@@ -729,6 +773,54 @@ export class DungeonScene extends Phaser.Scene {
       repeat: -1,
       duration: 1000,
     });
+  }
+
+  _createTraps(trapPositions) {
+    for (const pos of trapPositions) {
+      const tx = pos.x * this.tileSize + this.tileSize / 2;
+      const ty = pos.y * this.tileSize + this.tileSize / 2;
+      const sprite = this.add.image(tx, ty, 'tile-trap').setDepth(1);
+      this.traps.push({
+        sprite,
+        tileX: pos.x,
+        tileY: pos.y,
+        cooldown: 0,        // ready to trigger
+        active: false,
+      });
+    }
+  }
+
+  _checkTraps(delta) {
+    if (!this.player || !this.player.active || !this.traps) return;
+    for (const trap of this.traps) {
+      // Tick cooldowns
+      if (trap.cooldown > 0) {
+        trap.cooldown -= delta;
+        if (trap.cooldown <= 0) {
+          trap.cooldown = 0;
+          trap.active = false;
+          trap.sprite.setTexture('tile-trap');
+        }
+        continue;
+      }
+
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        trap.sprite.x, trap.sprite.y
+      );
+      if (dist < this.tileSize * 0.6) {
+        // Trigger trap
+        trap.active = true;
+        trap.cooldown = GAME_CONFIG.TRAP_COOLDOWN;
+        trap.sprite.setTexture('tile-trap-active');
+
+        const damage = GAME_CONFIG.TRAP_BASE_DAMAGE + (this.currentFloor - 1) * GAME_CONFIG.TRAP_DAMAGE_PER_FLOOR;
+        this.player.takeDamage(damage);
+        this.runStats.recordTrapTriggered();
+
+        this.showPopup(trap.sprite.x, trap.sprite.y - 16, `Trap! -${damage}`, '#ff4444');
+      }
+    }
   }
 
   goToNextFloor() {
@@ -1198,7 +1290,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     // Try buff potions if at full HP or no heal potions
-    for (const buffId of ['strength-potion', 'speed-potion']) {
+    for (const buffId of ['strength-potion', 'speed-potion', 'shield-potion']) {
       if (this.inventory.items[buffId] > 0) {
         const itemData = ITEM_DATA[buffId];
         this.inventory.removeItem(buffId, 1);
@@ -1264,8 +1356,19 @@ export class DungeonScene extends Phaser.Scene {
       if (!enemy.active || enemy.state === 'dead') continue;
       const dist = Phaser.Math.Distance.Between(attackData.x, attackData.y, enemy.x, enemy.y);
       if (dist < attackData.reach + 20) {
-        enemy.takeDamage(attackData.damage);
-        this.runStats.recordDamageDealt(attackData.damage);
+        // Roll for critical hit
+        const isCrit = Math.random() < GAME_CONFIG.CRIT_CHANCE;
+        const finalDamage = isCrit
+          ? Math.floor(attackData.damage * GAME_CONFIG.CRIT_MULTIPLIER)
+          : attackData.damage;
+
+        enemy.takeDamage(finalDamage);
+        this.runStats.recordDamageDealt(finalDamage);
+
+        if (isCrit) {
+          this.runStats.recordCriticalHit();
+          this.showPopup(enemy.x, enemy.y - 30, 'CRIT!', '#ffdd00');
+        }
       }
     }
   }
@@ -1389,6 +1492,7 @@ export class DungeonScene extends Phaser.Scene {
     if (this.player && this.player.active) {
       this.player.update(time, delta);
       this.checkInteractions();
+      this._checkTraps(delta);
       this.updateUI();
 
       // Use potion with Q key

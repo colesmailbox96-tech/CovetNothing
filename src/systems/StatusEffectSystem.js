@@ -61,6 +61,14 @@ export class StatusEffectSystem {
     return bonus;
   }
 
+  /** Get bonus defense from active effects */
+  getBonusDefense() {
+    let bonus = 0;
+    const shield = this.effects.get('defense_boost');
+    if (shield) bonus += shield.magnitude;
+    return bonus;
+  }
+
   /** Get speed multiplier from active effects (1.0 = normal) */
   getSpeedMultiplier() {
     let multiplier = 1.0;

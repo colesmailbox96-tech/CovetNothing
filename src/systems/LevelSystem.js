@@ -50,7 +50,9 @@ export class LevelSystem {
   }
 
   getDefense() {
-    return this.equipmentSystem ? this.equipmentSystem.getBonusDefense() : 0;
+    const equipBonus = this.equipmentSystem ? this.equipmentSystem.getBonusDefense() : 0;
+    const buffBonus = this.statusEffects ? this.statusEffects.getBonusDefense() : 0;
+    return equipBonus + buffBonus;
   }
 
   getScaledGold(baseMin, baseMax, floor) {

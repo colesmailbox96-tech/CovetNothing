@@ -119,4 +119,13 @@ export const ITEM_DATA = {
     type: 'consumable',
     effect: { buff: 'speed_boost', duration: 10000, magnitude: 0.5 },
   },
+  'shield-potion': {
+    name: 'Shield Potion',
+    description: 'Increases defense by 5 for 20 seconds.',
+    icon: 'item-shield-potion',
+    sellPrice: 14,
+    stackable: true,
+    type: 'consumable',
+    effect: { buff: 'defense_boost', duration: 20000, magnitude: 5 },
+  },
 };
