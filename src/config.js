@@ -54,7 +54,7 @@ export const GAME_CONFIG = {
   TRAP_COUNT_PER_FLOOR: 0.5,    // extra traps per floor (fractional, floored)
 
   // Critical hits
-  CRIT_CHANCE: 0.15,             // 15 % chance per attack
+  CRIT_CHANCE: 0.15,             // 15% chance per attack
   CRIT_MULTIPLIER: 1.5,          // 1.5× damage on crit
 };
 

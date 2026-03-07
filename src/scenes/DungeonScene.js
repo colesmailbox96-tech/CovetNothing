@@ -819,13 +819,6 @@ export class DungeonScene extends Phaser.Scene {
         this.runStats.recordTrapTriggered();
 
         this.showPopup(trap.sprite.x, trap.sprite.y - 16, `Trap! -${damage}`, '#ff4444');
-
-        // Reset texture after a flash
-        this.time.delayedCall(600, () => {
-          if (trap.sprite && trap.sprite.active) {
-            trap.sprite.setTexture('tile-trap-active');
-          }
-        });
       }
     }
   }
