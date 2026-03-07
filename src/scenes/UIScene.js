@@ -501,7 +501,15 @@ export class UIScene extends Phaser.Scene {
       const dashReady = !player || (player.dashCooldown <= 0 && !player.isDashing);
       const dashY = potionCount > 0 ? potionY + 12 + effects.length * effectLineHeight : potionY + effects.length * effectLineHeight;
       const dashColor = dashReady ? '#88ccff' : '#666666';
-      const dashLabel = dashReady ? '💨 Dash Ready (Shift)' : '💨 Dash...';
+      let dashLabel;
+      if (dashReady) {
+        dashLabel = '💨 Dash Ready (Shift)';
+      } else if (player) {
+        const remaining = Math.max(0, player.dashCooldown / 1000).toFixed(1);
+        dashLabel = `💨 Dash (${remaining}s)`;
+      } else {
+        dashLabel = '💨 Dash...';
+      }
       const dashText = this.add.text(panelX, dashY, dashLabel, {
         fontSize: '8px', fill: dashColor, fontFamily: 'monospace',
         stroke: '#000000', strokeThickness: 1,
