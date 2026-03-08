@@ -92,6 +92,12 @@ export class BootScene extends Phaser.Scene {
     this.load.image('item-temple-ash', 'assets/items/temple-ash.png');
     this.load.image('item-polished-beetle-eye', 'assets/items/polished-beetle-eye.png');
 
+    // ---- Building sprites ----
+    this.load.spritesheet('storefront-sprites', 'assets/sprites/storefront-sprites.png', {
+      frameWidth: 64,
+      frameHeight: 64,
+    });
+
     // ---- Tile assets ----
     this.load.image('town-path', 'assets/tiles/cobblestone-0.png');
     this.load.image('town-grass', 'assets/tiles/town-grass-0.png');

@@ -211,7 +211,13 @@ export class TownScene extends Phaser.Scene {
         if (tile === 0) {
           this.add.image(px, py, 'town-grass').setDepth(0);
         } else if (tile === 1) {
-          this.add.image(px, py, 'town-wall').setDepth(1);
+          // Shop building tiles get grass underneath; the storefront sprite covers them
+          const isShopTile = x >= 2 && x <= 5 && y >= 2 && y <= 4;
+          if (isShopTile) {
+            this.add.image(px, py, 'town-grass').setDepth(0);
+          } else {
+            this.add.image(px, py, 'town-wall').setDepth(1);
+          }
           const wall = this.physics.add.staticImage(px, py, 'town-wall');
           wall.setVisible(false);
           wall.body.setSize(ts, ts);
@@ -224,6 +230,13 @@ export class TownScene extends Phaser.Scene {
         }
       }
     }
+
+    // Place storefront sprite on the Shop building (tiles x:2-5, y:2-4)
+    const shopCenterX = (2 + 5) / 2 * ts + ts / 2;
+    const shopCenterY = (2 + 4) / 2 * ts + ts / 2;
+    this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
+      .setScale(2)
+      .setDepth(2);
   }
 
   createNPCs(ts) {
