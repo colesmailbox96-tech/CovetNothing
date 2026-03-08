@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/enemies.js';
-import { getDirection } from '../config.js';
+import { GAME_CONFIG, getDirection } from '../config.js';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
-  constructor(scene, x, y, enemyType) {
+  constructor(scene, x, y, enemyType, opts = {}) {
     const data = ENEMY_DATA[enemyType];
     const idleKey = `${enemyType}-idle-south-0`;
     super(scene, x, y, idleKey);
@@ -13,24 +13,48 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.enemyType = enemyType;
     this.data_ = data;
-    this.hp = data.hp;
-    this.maxHp = data.hp;
     this.facing = 'south';
-    this.state = 'patrol'; // patrol, chase, attack, dead
+    this.state = 'patrol'; // patrol, chase, attack, kite, dead
     this.attackCooldown = 0;
     this.patrolTimer = 0;
     this.patrolDir = { x: 0, y: 0 };
     this.isAttacking = false;
     this.hpBar = null;
 
+    // Boss variant: boosted stats + visual indicator
+    this.isBoss = !!opts.isBoss;
+    const hpMult = this.isBoss ? GAME_CONFIG.BOSS_HP_MULTIPLIER : 1;
+    const atkMult = this.isBoss ? GAME_CONFIG.BOSS_ATTACK_MULTIPLIER : 1;
+    this.hp = Math.floor(data.hp * hpMult);
+    this.maxHp = this.hp;
+    this.bossAttack = Math.floor(data.attack * atkMult);
+
     // Physics setup
-    const spriteScale = 0.45;
+    const spriteScale = this.isBoss ? GAME_CONFIG.BOSS_SPRITE_SCALE : 0.45;
     this.setScale(spriteScale);
     const bodySize = data.spriteSize * 0.35;
     const bodyOffset = (data.spriteSize - bodySize) / 2;
     this.body.setSize(bodySize, bodySize);
     this.body.setOffset(bodyOffset, bodyOffset + 10);
     this.setDepth(8);
+
+    // Boss glow
+    if (this.isBoss) {
+      this.setTintFill(0xff4444);
+      scene.time.delayedCall(200, () => {
+        if (this.active) this.clearTint();
+      });
+      this._bossGlow = scene.add.circle(x, y, data.spriteSize * 0.3, 0xff2222, 0.15).setDepth(7);
+      scene.tweens.add({
+        targets: this._bossGlow,
+        alpha: { from: 0.08, to: 0.2 },
+        scaleX: { from: 0.9, to: 1.15 },
+        scaleY: { from: 0.9, to: 1.15 },
+        yoyo: true,
+        repeat: -1,
+        duration: 800,
+      });
+    }
 
     // Start idle animation
     this.playIdle();
@@ -42,6 +66,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   createHPBar() {
     this.hpBar = this.scene.add.graphics();
     this.hpBar.setDepth(15);
+    if (this.isBoss) {
+      const name = `BOSS ${this.data_.name}`;
+      this._bossLabel = this.scene.add.text(this.x, this.y - this.displayHeight / 2 - 16, name, {
+        fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace', fontStyle: 'bold',
+        stroke: '#000000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(15);
+    }
     this.updateHPBar();
   }
 
@@ -49,8 +80,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.hpBar || !this.active) return;
     this.hpBar.clear();
 
-    const barWidth = 30;
-    const barHeight = 4;
+    const barWidth = this.isBoss ? 44 : 30;
+    const barHeight = this.isBoss ? 5 : 4;
     const x = this.x - barWidth / 2;
     const y = this.y - this.displayHeight / 2 - 8;
 
@@ -63,6 +94,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const color = hpPercent > 0.5 ? 0x00ff00 : hpPercent > 0.25 ? 0xffff00 : 0xff0000;
     this.hpBar.fillStyle(color, 1);
     this.hpBar.fillRect(x, y, barWidth * hpPercent, barHeight);
+
+    // Update boss label position
+    if (this._bossLabel && this._bossLabel.active) {
+      this._bossLabel.setPosition(this.x, y - 8);
+    }
+    // Update boss glow position
+    if (this._bossGlow && this._bossGlow.active) {
+      this._bossGlow.setPosition(this.x, this.y);
+    }
   }
 
   playIdle() {
@@ -181,6 +221,31 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
+    // Ranged enemies try to keep their distance
+    if (this.data_.attackType === 'ranged') {
+      const retreatRange = this.data_.retreatRange || 80;
+      if (dist < retreatRange) {
+        this.doKite(player);
+      } else if (dist < this.data_.attackRange) {
+        if (this.attackCooldown <= 0) {
+          this.doAttack(player);
+        } else {
+          this.setVelocity(0, 0);
+          const dx = player.x - this.x;
+          const dy = player.y - this.y;
+          const dir = getDirection(dx, dy);
+          if (dir) this.facing = dir;
+          this.playIdle();
+        }
+      } else if (dist < this.data_.aggroRange) {
+        this.doChase(player);
+      } else {
+        this.doPatrol(delta);
+      }
+      return;
+    }
+
+    // Melee AI (original)
     if (dist < this.data_.attackRange) {
       if (this.attackCooldown <= 0) {
         this.doAttack(player);
@@ -246,6 +311,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  /** Ranged enemies retreat when player gets too close */
+  doKite(player) {
+    this.state = 'kite';
+    const dx = this.x - player.x;
+    const dy = this.y - player.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+
+    if (len > 0) {
+      const speed = this.data_.chaseSpeed;
+      this.setVelocity((dx / len) * speed, (dy / len) * speed);
+      // Face the player while retreating
+      const dir = getDirection(-dx, -dy);
+      if (dir) {
+        this.facing = dir;
+        this.playWalk(this.facing);
+      }
+    }
+  }
+
   doAttack(player) {
     if (this.isAttacking) return;
 
@@ -262,20 +346,45 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.playAttack();
 
-    // Deal damage after slight delay
-    this.scene.time.delayedCall(200, () => {
-      if (!this.active || this.state === 'dead') return;
-      const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
-      if (dist < this.data_.attackRange * 1.5) {
-        player.takeDamage(this.data_.attack, this.x, this.y);
-      }
-    });
+    const attackDamage = this.isBoss ? this.bossAttack : this.data_.attack;
+
+    if (this.data_.attackType === 'ranged') {
+      // Fire a projectile after a slight wind-up delay
+      this.scene.time.delayedCall(300, () => {
+        if (!this.active || this.state === 'dead') return;
+        this.scene.events.emit('enemyRangedAttack', {
+          x: this.x,
+          y: this.y,
+          targetX: player.x,
+          targetY: player.y,
+          damage: attackDamage,
+          speed: this.data_.projectileSpeed || 180,
+        });
+      });
+    } else {
+      // Melee: deal damage after slight delay
+      this.scene.time.delayedCall(200, () => {
+        if (!this.active || this.state === 'dead') return;
+        const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+        if (dist < this.data_.attackRange * 1.5) {
+          player.takeDamage(attackDamage, this.x, this.y);
+        }
+      });
+    }
   }
 
   destroy(fromScene) {
     if (this.hpBar) {
       this.hpBar.destroy();
       this.hpBar = null;
+    }
+    if (this._bossLabel) {
+      this._bossLabel.destroy();
+      this._bossLabel = null;
+    }
+    if (this._bossGlow) {
+      this._bossGlow.destroy();
+      this._bossGlow = null;
     }
     super.destroy(fromScene);
   }

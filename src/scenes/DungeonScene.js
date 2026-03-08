@@ -12,6 +12,7 @@ import { CraftingSystem } from '../systems/CraftingSystem.js';
 import { ITEM_DATA } from '../data/items.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
+import { getRandomDescription } from '../data/roomDescriptions.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -63,6 +64,7 @@ export class DungeonScene extends Phaser.Scene {
     this.doorGroup = this.physics.add.staticGroup();
     this.wallLayer = this.physics.add.staticGroup();
     this.floorGroup = this.add.group();
+    this.projectiles = this.physics.add.group();
     this._wallImages = [];
     this._colliders = [];
 
@@ -82,7 +84,9 @@ export class DungeonScene extends Phaser.Scene {
     this.events.on('playerDeath', this.handlePlayerDeath, this);
     this.events.on('playerDamageTaken', (amount) => {
       this.runStats.recordDamageTaken(amount);
+      this._shakeCamera();
     });
+    this.events.on('enemyRangedAttack', this._handleRangedAttack, this);
 
     // Build node minimap
     this.createNodeMinimap();
@@ -399,6 +403,8 @@ export class DungeonScene extends Phaser.Scene {
       this.physics.add.collider(this.enemies, this.wallLayer),
       this.physics.add.collider(this.player, this.doorGroup),
       this.physics.add.collider(this.enemies, this.doorGroup),
+      this.physics.add.overlap(this.projectiles, this.player, this._onProjectileHitPlayer, null, this),
+      this.physics.add.collider(this.projectiles, this.wallLayer, this._onProjectileHitWall, null, this),
     ];
 
     // Camera
@@ -419,6 +425,11 @@ export class DungeonScene extends Phaser.Scene {
 
     // Update minimap
     if (this.nodeMapGfx) this._redrawNodeMinimap();
+
+    // Show room atmosphere text
+    if (roomId !== 0) {
+      this._showRoomAtmosphere(node.type);
+    }
   }
 
   /** Destroy all room-specific game objects */
@@ -439,6 +450,11 @@ export class DungeonScene extends Phaser.Scene {
     this.waveQueue = [];
     this.waveActive = false;
     this.waveSpawning = false;
+
+    // Projectiles
+    if (this.projectiles) {
+      this.projectiles.clear(true, true);
+    }
 
     // Doors
     this.doorGroup.clear(true, true);
@@ -697,7 +713,9 @@ export class DungeonScene extends Phaser.Scene {
 
       const epx = ex * this.tileSize + this.tileSize / 2;
       const epy = ey * this.tileSize + this.tileSize / 2;
-      const enemy = new Enemy(this, epx, epy, spawn.type);
+      const enemy = new Enemy(this, epx, epy, spawn.type, {
+        isBoss: !!spawn.isBoss,
+      });
       enemy.roomIndex = roomId;
       this.enemies.add(enemy);
       if (!this.roomEnemies[roomId]) this.roomEnemies[roomId] = [];
@@ -1433,6 +1451,140 @@ export class DungeonScene extends Phaser.Scene {
 
   // ===================== COMBAT EVENTS =====================
 
+  /** Camera shake when player takes damage */
+  _shakeCamera() {
+    this.cameras.main.shake(150, 0.005);
+  }
+
+  /** Spawn colored particle burst on enemy death */
+  _spawnDeathParticles(x, y, enemyType) {
+    const colors = {
+      'dust-wraith':    [0x7755cc, 0x9977ee, 0xbbaaff],
+      'sand-stalker':   [0xccaa55, 0xffcc44, 0xbb8833],
+      'weeping-widow':  [0x88aacc, 0xaaccee, 0x667788],
+      'temple-beetle':  [0x88aa44, 0xaacc66, 0x556633],
+    };
+    const palette = colors[enemyType] || [0xffffff, 0xcccccc, 0x999999];
+    const count = 8;
+
+    for (let i = 0; i < count; i++) {
+      const color = palette[Math.floor(Math.random() * palette.length)];
+      const size = Phaser.Math.Between(2, 5);
+      const particle = this.add.circle(x, y, size, color, 0.9).setDepth(20);
+
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
+      const dist = Phaser.Math.Between(20, 45);
+      const tx = x + Math.cos(angle) * dist;
+      const ty = y + Math.sin(angle) * dist;
+
+      this.tweens.add({
+        targets: particle,
+        x: tx,
+        y: ty,
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: Phaser.Math.Between(300, 600),
+        ease: 'Quad.easeOut',
+        onComplete: () => particle.destroy(),
+      });
+    }
+  }
+
+  /** Show atmospheric room description */
+  _showRoomAtmosphere(roomType) {
+    const desc = getRandomDescription(roomType);
+    const room = this.roomData;
+    const cx = Math.floor(room.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = Math.floor(room.height / 2) * this.tileSize + this.tileSize / 2 + 30;
+
+    const text = this.add.text(cx, cy, desc, {
+      fontSize: '9px',
+      fill: '#aaaaaa',
+      fontFamily: 'monospace',
+      fontStyle: 'italic',
+      stroke: '#000000',
+      strokeThickness: 2,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(25).setAlpha(0);
+
+    // Fade in, hold, fade out
+    this.tweens.add({
+      targets: text,
+      alpha: 0.9,
+      duration: 500,
+      hold: 2000,
+      yoyo: true,
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  /** Handle ranged enemy projectile */
+  _handleRangedAttack(data) {
+    const { x, y, targetX, targetY, damage, speed } = data;
+    const textureKey = 'projectile-sand';
+
+    if (!this.textures.exists(textureKey)) return;
+
+    const projectile = this.physics.add.image(x, y, textureKey);
+    projectile.setDepth(12);
+    projectile.setCircle(5);
+    projectile.damage = damage;
+    this.projectiles.add(projectile);
+
+    // Calculate velocity toward target position
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      projectile.setVelocity((dx / len) * speed, (dy / len) * speed);
+    }
+
+    // Auto-destroy after 3 seconds (safety net)
+    this.time.delayedCall(3000, () => {
+      if (projectile.active) projectile.destroy();
+    });
+  }
+
+  /** Projectile hits the player */
+  _onProjectileHitPlayer(obj1, obj2) {
+    // Identify which object is the projectile (belongs to projectiles group)
+    let projectile, player;
+    if (this.projectiles.contains(obj1)) {
+      projectile = obj1;
+      player = obj2;
+    } else {
+      projectile = obj2;
+      player = obj1;
+    }
+    if (!player.active || !projectile.active) return;
+    if (typeof player.takeDamage !== 'function') return;
+    const damage = projectile.damage || 5;
+    player.takeDamage(damage);
+    this._spawnProjectileImpact(projectile.x, projectile.y);
+    projectile.destroy();
+  }
+
+  /** Projectile hits a wall */
+  _onProjectileHitWall(projectile) {
+    if (!projectile.active) return;
+    this._spawnProjectileImpact(projectile.x, projectile.y);
+    projectile.destroy();
+  }
+
+  /** Small impact flash when a projectile hits something */
+  _spawnProjectileImpact(x, y) {
+    const flash = this.add.circle(x, y, 6, 0xffcc44, 0.8).setDepth(20);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 2,
+      scaleY: 2,
+      duration: 200,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
   handlePlayerAttack(attackData) {
     const enemies = this.enemies.getChildren();
     for (const enemy of enemies) {
@@ -1462,6 +1614,9 @@ export class DungeonScene extends Phaser.Scene {
 
     this.runStats.recordKill();
 
+    // Death particles
+    this._spawnDeathParticles(data.x, data.y, data.enemyType);
+
     const goldAmount = this.levelSystem.getScaledGold(
       enemyData.gold.min, enemyData.gold.max, this.currentFloor
     );
@@ -1471,7 +1626,9 @@ export class DungeonScene extends Phaser.Scene {
     this.runStats.recordGold(goldAmount);
     const leveledUp = this.levelSystem.addExp(expAmount);
 
-    this.showPopup(data.x, data.y - 10, `+${goldAmount}g +${expAmount}xp`, '#ffdd44');
+    // Separate gold and exp popups for clarity
+    this.showPopup(data.x - 15, data.y - 10, `+${goldAmount}g`, '#ffdd44');
+    this.showPopup(data.x + 15, data.y - 10, `+${expAmount}xp`, '#88ccff');
 
     if (leveledUp) {
       this.showPopup(data.x, data.y - 30, `LEVEL UP! Lv${this.levelSystem.level}`, '#44ff44');
