@@ -3,9 +3,10 @@ import { getDirection } from '../config.js';
 import { ITEM_DATA } from '../data/items.js';
 import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 
-const JOYSTICK_DEAD_ZONE = 0.15;
-const SWIPE_THRESHOLD = 30;     // min px to count as a swipe
-const SWIPE_MAX_TIME = 300;     // max ms for a swipe gesture
+const JOYSTICK_DEAD_ZONE = 0.12;
+const SWIPE_THRESHOLD = 25;     // min px to count as a swipe (lowered for mobile precision)
+const SWIPE_MAX_TIME = 350;     // max ms for a swipe gesture (slightly more forgiving)
+const UI_UPDATE_INTERVAL = 100; // ms between full HUD rebuilds (throttle from 60fps)
 
 export class UIScene extends Phaser.Scene {
   constructor() {
@@ -31,6 +32,10 @@ export class UIScene extends Phaser.Scene {
     const hasTouchAPI = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     this.isTouchDevice = hasCoarsePointer && hasTouchAPI;
 
+    // HUD throttle: avoid destroying/recreating all UI elements every frame
+    this._lastHUDUpdateTime = 0;
+    this._lastHUDStatsJSON = '';
+
     // Read iOS safe area insets from CSS environment variables
     this.safeArea = { top: 0, right: 0, bottom: 0, left: 0 };
     this._readSafeAreaInsets();
@@ -50,10 +55,43 @@ export class UIScene extends Phaser.Scene {
       this._setupSwipeGesture();
     }
 
-    // Listen for stat updates from game scenes
+    // Listen for stat updates from game scenes (throttled to avoid 60fps HUD rebuilds)
     this.events.on('updateStats', (data) => {
+      // Clear stale activeEffects when they are not included in the update
+      // (common for TownScene) or when the player is in town.
+      if (data.location === 'town' || !('activeEffects' in data)) {
+        this.stats.activeEffects = [];
+      }
       Object.assign(this.stats, data);
-      this.refreshHUD();
+      const now = Date.now();
+      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
+
+      // If the fingerprint hasn't changed, skip any HUD work entirely.
+      if (statsJSON === this._lastHUDStatsJSON) {
+        return;
+      }
+
+      this._lastHUDStatsJSON = statsJSON;
+
+      const elapsed = now - this._lastHUDUpdateTime;
+
+      // If enough time has passed since the last full HUD rebuild, update immediately.
+      if (elapsed >= UI_UPDATE_INTERVAL) {
+        this._lastHUDUpdateTime = now;
+        this.refreshHUD();
+        return;
+      }
+
+      // Otherwise, schedule a single delayed HUD refresh if one is not already pending.
+      if (!this._pendingHUDUpdate) {
+        this._pendingHUDUpdate = true;
+        const delay = UI_UPDATE_INTERVAL - elapsed;
+        this.time.delayedCall(delay, () => {
+          this._pendingHUDUpdate = false;
+          this._lastHUDUpdateTime = Date.now();
+          this.refreshHUD();
+        });
+      }
     });
 
     // Toggle inventory with I key
@@ -138,14 +176,14 @@ export class UIScene extends Phaser.Scene {
   }
 
   createVirtualJoystick(screenW, safeBottom, safeLeft) {
-    // DPI-aware scaling: base radius scales with screen and device pixel ratio
+    // DPI-aware scaling: larger base radius for better thumb control
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    const baseRadius = Math.min(50, screenW * 0.08) * Math.max(1, dpr * 0.45);
-    const knobRadius = baseRadius * 0.45;
+    const baseRadius = Math.min(60, screenW * 0.1) * Math.max(1, dpr * 0.42);
+    const knobRadius = baseRadius * 0.5;
 
-    // Floating joystick: define the touch zone on the left half of the screen
-    const zoneWidth = screenW * 0.45;
-    const zoneHeight = safeBottom * 0.5;
+    // Floating joystick: expanded touch zone covering left half of screen
+    const zoneWidth = screenW * 0.5;
+    const zoneHeight = safeBottom * 0.65;
     const zoneX = safeLeft;
     const zoneY = safeBottom - zoneHeight;
 
@@ -229,24 +267,37 @@ export class UIScene extends Phaser.Scene {
 
     this.joyKnob.setPosition(base.x + nx, base.y + ny);
 
-    // Normalize to -1..1 range with dead zone
-    const normX = nx / maxDist;
-    const normY = ny / maxDist;
-    this.touchMoveX = Math.abs(normX) > JOYSTICK_DEAD_ZONE ? normX : 0;
-    this.touchMoveY = Math.abs(normY) > JOYSTICK_DEAD_ZONE ? normY : 0;
+    // Normalize to -1..1 range with dead zone and response curve
+    const rawX = nx / maxDist;
+    const rawY = ny / maxDist;
+    // Apply dead zone
+    let normX = Math.abs(rawX) > JOYSTICK_DEAD_ZONE ? rawX : 0;
+    let normY = Math.abs(rawY) > JOYSTICK_DEAD_ZONE ? rawY : 0;
+    // Apply slight exponential curve for finer low-speed control
+    if (normX !== 0) {
+      const sign = normX > 0 ? 1 : -1;
+      normX = sign * Math.pow(Math.abs(normX), 1.3);
+    }
+    if (normY !== 0) {
+      const sign = normY > 0 ? 1 : -1;
+      normY = sign * Math.pow(Math.abs(normY), 1.3);
+    }
+    this.touchMoveX = normX;
+    this.touchMoveY = normY;
 
     this.syncTouchInput();
   }
 
   createActionButtons(screenW, safeBottom, safeRight) {
     // DPI-aware scaling for consistent physical button sizes across devices
+    // Minimum 44pt touch targets per Apple HIG
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    const btnRadius = Math.min(32, screenW * 0.06) * Math.max(1, dpr * 0.4);
-    const pad = btnRadius * 0.7;
+    const btnRadius = Math.max(26, Math.min(38, screenW * 0.07)) * Math.max(1, dpr * 0.38);
+    const pad = btnRadius * 0.55;
 
     // Position buttons on the right side with safe area padding
-    const rightX = screenW - btnRadius - safeRight - 10;
-    const bottomY = safeBottom - btnRadius - 10;
+    const rightX = screenW - btnRadius - safeRight - 8;
+    const bottomY = safeBottom - btnRadius - 8;
 
     // Attack button (bottom-right, largest)
     this.createTouchButton(rightX, bottomY, btnRadius, '⚔️', 0xff4444, () => {
@@ -276,27 +327,33 @@ export class UIScene extends Phaser.Scene {
   }
 
   createTouchButton(x, y, radius, label, color, callback) {
-    const bg = this.add.circle(x, y, radius, color, 0.3);
-    bg.setStrokeStyle(2, color, 0.6);
+    // Outer glow ring for visibility
+    const glow = this.add.circle(x, y, radius + 3, color, 0.1);
+    this.touchContainer.add(glow);
+
+    const bg = this.add.circle(x, y, radius, color, 0.35);
+    bg.setStrokeStyle(2.5, color, 0.7);
     this.touchContainer.add(bg);
 
     const text = this.add.text(x, y, label, {
-      fontSize: `${Math.max(14, radius * 0.7)}px`,
+      fontSize: `${Math.max(16, radius * 0.65)}px`,
       fill: '#ffffff',
       fontFamily: 'monospace',
       fontStyle: 'bold',
       stroke: '#000000',
-      strokeThickness: 2,
+      strokeThickness: 3,
     }).setOrigin(0.5);
     this.touchContainer.add(text);
 
-    // Make interactive with a slightly larger hit area for easier tapping
-    const hitRadius = radius * 1.15;
+    // 30% larger hit area for fat-finger tolerance (Apple HIG: 44pt minimum)
+    const hitRadius = radius * 1.3;
     bg.setInteractive(new Phaser.Geom.Circle(0, 0, hitRadius), Phaser.Geom.Circle.Contains);
     bg.on('pointerdown', () => {
-      bg.setAlpha(0.8);
-      bg.setScale(0.92);
-      text.setScale(0.92);
+      bg.setAlpha(0.9);
+      bg.setScale(0.9);
+      text.setScale(0.9);
+      glow.setAlpha(0.3);
+      glow.setScale(1.15);
       UIScene.haptic(12);
       callback();
     });
@@ -304,18 +361,35 @@ export class UIScene extends Phaser.Scene {
       bg.setAlpha(1);
       bg.setScale(1);
       text.setScale(1);
+      glow.setAlpha(0.1);
+      glow.setScale(1);
     });
     bg.on('pointerout', () => {
       bg.setAlpha(1);
       bg.setScale(1);
       text.setScale(1);
+      glow.setAlpha(0.1);
+      glow.setScale(1);
     });
+
+    return { bg, text, glow };
   }
 
   emitTouchAction(action) {
     if (action === 'attack') {
       const player = this.getActivePlayer();
       if (player && player.active) {
+        // Auto-face nearest enemy when tapping attack button (better mobile UX)
+        const dungeonScene = this.scene.get('DungeonScene');
+        if (dungeonScene && dungeonScene.scene.isActive() && dungeonScene.findNearestEnemyInRange) {
+          const nearest = dungeonScene.findNearestEnemyInRange();
+          if (nearest) {
+            const dx = nearest.x - player.x;
+            const dy = nearest.y - player.y;
+            const dir = getDirection(dx, dy);
+            if (dir) player.facing = dir;
+          }
+        }
         UIScene.haptic(20);
         player.tryAttack();
       }
@@ -609,8 +683,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   createInventoryPanel(width, height) {
-    const panelW = Math.min(280, width * 0.45);
-    const panelH = Math.min(320, height * 0.55);
+    // Larger panels on mobile for readability
+    const panelW = this.isTouchDevice ? Math.min(320, width * 0.55) : Math.min(280, width * 0.45);
+    const panelH = this.isTouchDevice ? Math.min(380, height * 0.65) : Math.min(320, height * 0.55);
     const panelX = width / 2 - panelW / 2;
     const panelY = height / 2 - panelH / 2;
 
@@ -641,15 +716,18 @@ export class UIScene extends Phaser.Scene {
 
     // Close button (top-right corner of panel) for touch devices
     if (this.isTouchDevice) {
-      const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
-        fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+      // Larger close button with hit area for fat-finger tolerance
+      const closeBg = this.add.circle(panelX + panelW - 16, panelY + 16, 16, 0xff4444, 0.3)
+        .setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains);
+      const closeBtn = this.add.text(panelX + panelW - 16, panelY + 16, '✕', {
+        fontSize: '16px', fill: '#ff6666', fontFamily: 'monospace',
         fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
-      }).setOrigin(1, 0).setInteractive();
-      closeBtn.on('pointerdown', () => {
+      }).setOrigin(0.5);
+      closeBg.on('pointerdown', () => {
         this.showInventory = false;
         this.refreshHUD();
       });
-      this.uiContainer.add(closeBtn);
+      this.uiContainer.add([closeBg, closeBtn]);
     }
 
     const items = this.stats.inventory || [];
@@ -714,13 +792,15 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this._overlayPanel.add(title);
 
-    // Close button
-    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
-      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+    // Close button — large touch target
+    const eqCloseBg = this.add.circle(panelX + panelW - 16, panelY + 16, 16, 0xff4444, 0.3)
+      .setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains);
+    const eqCloseBtn = this.add.text(panelX + panelW - 16, panelY + 16, '✕', {
+      fontSize: '16px', fill: '#ff6666', fontFamily: 'monospace',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(1, 0).setInteractive();
-    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
-    this._overlayPanel.add(closeBtn);
+    }).setOrigin(0.5);
+    eqCloseBg.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add([eqCloseBg, eqCloseBtn]);
 
     let yOffset = panelY + 32;
 
@@ -747,8 +827,9 @@ export class UIScene extends Phaser.Scene {
       if (equipped) {
         // Unequip button
         const unBtn = this.add.text(panelX + panelW - 14, yOffset, '[Unequip]', {
-          fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace',
+          fontSize: '10px', fill: '#ff6644', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 1,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
         }).setOrigin(1, 0).setInteractive();
         unBtn.on('pointerdown', () => {
           const removed = equipmentSystem.unequip(slot);
@@ -797,8 +878,9 @@ export class UIScene extends Phaser.Scene {
         this._overlayPanel.add(itemText);
 
         const equipBtn = this.add.text(panelX + panelW - 14, yOffset, '[Equip]', {
-          fontSize: '8px', fill: '#44ff44', fontFamily: 'monospace',
+          fontSize: '10px', fill: '#44ff44', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 1,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
         }).setOrigin(1, 0).setInteractive();
         equipBtn.on('pointerdown', () => {
           // Remove from inventory
@@ -846,13 +928,15 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this._overlayPanel.add(title);
 
-    // Close button
-    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
-      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+    // Close button — large touch target
+    const craftCloseBg = this.add.circle(panelX + panelW - 16, panelY + 16, 16, 0xff4444, 0.3)
+      .setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains);
+    const craftCloseBtn = this.add.text(panelX + panelW - 16, panelY + 16, '✕', {
+      fontSize: '16px', fill: '#ff6666', fontFamily: 'monospace',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(1, 0).setInteractive();
-    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
-    this._overlayPanel.add(closeBtn);
+    }).setOrigin(0.5);
+    craftCloseBg.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add([craftCloseBg, craftCloseBtn]);
 
     let yOffset = panelY + 32;
 
@@ -875,8 +959,9 @@ export class UIScene extends Phaser.Scene {
       // Craft button
       if (canCraft) {
         const craftBtn = this.add.text(panelX + panelW - 14, yOffset, '[Craft]', {
-          fontSize: '9px', fill: '#44ff44', fontFamily: 'monospace',
+          fontSize: '10px', fill: '#44ff44', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 1,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
         }).setOrigin(1, 0).setInteractive();
         craftBtn.on('pointerdown', () => {
           CraftingSystem.craft(recipe, inventory);
@@ -936,13 +1021,15 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this._overlayPanel.add(title);
 
-    // Close button
-    const closeBtn = this.add.text(panelX + panelW - 10, panelY + 6, '✕', {
-      fontSize: '14px', fill: '#ff6666', fontFamily: 'monospace',
+    // Close button — large touch target
+    const merchCloseBg = this.add.circle(panelX + panelW - 16, panelY + 16, 16, 0xff4444, 0.3)
+      .setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains);
+    const merchCloseBtn = this.add.text(panelX + panelW - 16, panelY + 16, '✕', {
+      fontSize: '16px', fill: '#ff6666', fontFamily: 'monospace',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(1, 0).setInteractive();
-    closeBtn.on('pointerdown', () => this._destroyOverlayPanel());
-    this._overlayPanel.add(closeBtn);
+    }).setOrigin(0.5);
+    merchCloseBg.on('pointerdown', () => this._destroyOverlayPanel());
+    this._overlayPanel.add([merchCloseBg, merchCloseBtn]);
 
     // Gold display
     const goldText = this.add.text(panelX + 14, panelY + 30, `Your Gold: ${levelSystem.gold}g`, {
@@ -992,8 +1079,9 @@ export class UIScene extends Phaser.Scene {
 
       if (canBuy) {
         const buyBtn = this.add.text(panelX + panelW - 14, yOffset, '[Buy]', {
-          fontSize: '8px', fill: '#44ff44', fontFamily: 'monospace',
+          fontSize: '10px', fill: '#44ff44', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 1,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
         }).setOrigin(1, 0).setInteractive();
         buyBtn.on('pointerdown', () => {
           if (levelSystem.removeGold(item.price)) {
@@ -1049,8 +1137,9 @@ export class UIScene extends Phaser.Scene {
         this._overlayPanel.add(itemText);
 
         const sellBtn = this.add.text(panelX + panelW - 14, yOffset, '[Sell All]', {
-          fontSize: '8px', fill: '#ffaa44', fontFamily: 'monospace',
+          fontSize: '10px', fill: '#ffaa44', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 1,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
         }).setOrigin(1, 0).setInteractive();
         sellBtn.on('pointerdown', () => {
           levelSystem.addGold(totalValue);
