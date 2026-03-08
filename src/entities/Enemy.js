@@ -61,6 +61,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         repeat: -1,
         duration: 800,
       });
+
+      // Boss special attack cooldowns
+      this.bossAbilityCooldown = 3000; // initial delay before first special
+      this.bossAbilityType = 'slam';   // alternates: slam, charge
     }
 
     // Start idle animation
@@ -215,11 +219,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.attackCooldown -= delta;
     }
 
+    // Boss special ability cooldown
+    if (this.isBoss && this.bossAbilityCooldown > 0) {
+      this.bossAbilityCooldown -= delta;
+    }
+
     // Don't change AI state while attack animation is playing
     if (this.isAttacking) {
       this.setVelocity(0, 0);
       return;
     }
+
+    // Don't change state during charge
+    if (this._isCharging) return;
 
     if (!player || !player.active || player.hp <= 0) {
       this.doPatrol(delta);
@@ -253,6 +265,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     // Melee AI (original)
+    // Boss special attack check
+    if (this.isBoss && this.bossAbilityCooldown <= 0 && dist < this.data_.aggroRange) {
+      this.doBossAbility(player, dist);
+      return;
+    }
+
     if (dist < this.data_.attackRange) {
       if (this.attackCooldown <= 0) {
         this.doAttack(player);
@@ -378,6 +396,171 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
       });
     }
+  }
+
+  /** Boss special ability — alternates between ground slam and charge */
+  doBossAbility(player, dist) {
+    if (this.bossAbilityType === 'slam' && dist < GAME_CONFIG.BOSS_SLAM_RANGE * 1.5) {
+      this.doGroundSlam(player);
+    } else if (this.bossAbilityType === 'charge' && dist > GAME_CONFIG.BOSS_SLAM_RANGE) {
+      this.doCharge(player);
+    } else {
+      // Not in range for current ability — try the other one or chase
+      if (this.bossAbilityType === 'slam') {
+        this.doChase(player);
+      } else {
+        // Switch to slam if close enough
+        if (dist < GAME_CONFIG.BOSS_SLAM_RANGE * 1.5) {
+          this.bossAbilityType = 'slam';
+          this.doGroundSlam(player);
+        } else {
+          this.doCharge(player);
+        }
+      }
+    }
+  }
+
+  /** Boss Ground Slam — AoE damage around the boss with telegraph */
+  doGroundSlam(player) {
+    this.isAttacking = true;
+    this.setVelocity(0, 0);
+    this.bossAbilityCooldown = GAME_CONFIG.BOSS_SLAM_COOLDOWN;
+    this.bossAbilityType = 'charge'; // alternate
+
+    const range = GAME_CONFIG.BOSS_SLAM_RANGE;
+
+    // Telegraph: red circle that expands
+    const telegraph = this.scene.add.circle(this.x, this.y, range, 0xff2222, 0.15).setDepth(5);
+    telegraph.setScale(0.3);
+    this.scene.tweens.add({
+      targets: telegraph,
+      scaleX: 1,
+      scaleY: 1,
+      alpha: 0.3,
+      duration: GAME_CONFIG.BOSS_SLAM_WINDUP,
+    });
+
+    // Tint boss during windup
+    this.setTint(0xff6600);
+
+    this.scene.time.delayedCall(GAME_CONFIG.BOSS_SLAM_WINDUP, () => {
+      if (!this.active || this.state === 'dead') {
+        telegraph.destroy();
+        return;
+      }
+
+      // Impact flash
+      telegraph.setAlpha(0.5);
+      this.scene.tweens.add({
+        targets: telegraph,
+        alpha: 0,
+        scaleX: 1.3,
+        scaleY: 1.3,
+        duration: 300,
+        onComplete: () => telegraph.destroy(),
+      });
+
+      // Screen shake
+      this.scene.cameras.main.shake(200, 0.008);
+
+      // Damage player if in range
+      const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+      if (dist < range && player.active && player.hp > 0) {
+        const damage = Math.floor(this.bossAttack * GAME_CONFIG.BOSS_SLAM_DAMAGE_MULT);
+        player.takeDamage(damage, this.x, this.y);
+      }
+
+      // Impact particles
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI * 2 * i) / 6;
+        const px = this.x + Math.cos(angle) * range * 0.6;
+        const py = this.y + Math.sin(angle) * range * 0.6;
+        const particle = this.scene.add.circle(px, py, 3, 0xff4400, 0.8).setDepth(20);
+        this.scene.tweens.add({
+          targets: particle,
+          x: this.x + Math.cos(angle) * range * 1.2,
+          y: this.y + Math.sin(angle) * range * 1.2,
+          alpha: 0,
+          duration: 400,
+          onComplete: () => particle.destroy(),
+        });
+      }
+
+      this.clearTint();
+      this.isAttacking = false;
+    });
+  }
+
+  /** Boss Charge — rush toward the player at high speed */
+  doCharge(player) {
+    this.isAttacking = true;
+    this._isCharging = true;
+    this.bossAbilityCooldown = GAME_CONFIG.BOSS_CHARGE_COOLDOWN;
+    this.bossAbilityType = 'slam'; // alternate
+
+    // Face the player
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const dir = getDirection(dx, dy);
+    if (dir) this.facing = dir;
+
+    // Brief windup
+    this.setTint(0xff8800);
+    this.setVelocity(0, 0);
+
+    this.scene.time.delayedCall(350, () => {
+      if (!this.active || this.state === 'dead') {
+        this._isCharging = false;
+        this.isAttacking = false;
+        return;
+      }
+
+      // Charge!
+      const speed = GAME_CONFIG.BOSS_CHARGE_SPEED;
+      if (len > 0) {
+        this.setVelocity((dx / len) * speed, (dy / len) * speed);
+      }
+
+      // Trail effect during charge
+      const trailInterval = this.scene.time.addEvent({
+        delay: 50,
+        repeat: Math.floor(GAME_CONFIG.BOSS_CHARGE_DURATION / 50),
+        callback: () => {
+          if (!this.active) return;
+          const ghost = this.scene.add.circle(this.x, this.y, 8, 0xff6600, 0.4).setDepth(5);
+          this.scene.tweens.add({
+            targets: ghost,
+            alpha: 0,
+            scaleX: 0.2,
+            scaleY: 0.2,
+            duration: 300,
+            onComplete: () => ghost.destroy(),
+          });
+        },
+      });
+
+      // End charge after duration
+      this.scene.time.delayedCall(GAME_CONFIG.BOSS_CHARGE_DURATION, () => {
+        if (!this.active || this.state === 'dead') {
+          this._isCharging = false;
+          this.isAttacking = false;
+          return;
+        }
+
+        this.setVelocity(0, 0);
+        this._isCharging = false;
+        this.isAttacking = false;
+        this.clearTint();
+
+        // Check if we hit the player
+        const hitDist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+        if (hitDist < 45 && player.active && player.hp > 0) {
+          const damage = Math.floor(this.bossAttack * GAME_CONFIG.BOSS_CHARGE_DAMAGE_MULT);
+          player.takeDamage(damage, this.x, this.y);
+        }
+      });
+    });
   }
 
   destroy(fromScene) {

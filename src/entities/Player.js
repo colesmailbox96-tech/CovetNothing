@@ -36,6 +36,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     });
     this.attackKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.dashKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.ability1Key = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.ability2Key = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
 
     // Dash state
     this.isDashing = false;
@@ -253,6 +255,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Dash with shift
     if (Phaser.Input.Keyboard.JustDown(this.dashKey)) {
       this.tryDash();
+    }
+
+    // Abilities
+    if (Phaser.Input.Keyboard.JustDown(this.ability1Key)) {
+      this.scene.events.emit('useAbility', 'whirlwind');
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.ability2Key)) {
+      this.scene.events.emit('useAbility', 'war_cry');
     }
 
     if (vx !== 0 || vy !== 0) {
