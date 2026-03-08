@@ -86,3 +86,10 @@ export function getDirection(vx, vy) {
   if (angle >= -67.5 && angle < -22.5) return 'north-east';
   return 'south';
 }
+
+// Adaptive camera zoom based on screen width for mobile/tablet/desktop
+export function getAdaptiveZoom(screenW) {
+  if (screenW < 480) return 1.6;   // phones
+  if (screenW < 768) return 1.8;   // tablets
+  return 2;                         // desktop
+}

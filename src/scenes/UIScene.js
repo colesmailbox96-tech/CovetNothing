@@ -60,7 +60,7 @@ export class UIScene extends Phaser.Scene {
     this.events.on('updateStats', (data) => {
       Object.assign(this.stats, data);
       const now = Date.now();
-      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + i.quantity).join(',')}`;
+      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
       if (statsJSON !== this._lastHUDStatsJSON || now - this._lastHUDUpdateTime > UI_UPDATE_INTERVAL) {
         this._lastHUDStatsJSON = statsJSON;
         this._lastHUDUpdateTime = now;

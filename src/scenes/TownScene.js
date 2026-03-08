@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG } from '../config.js';
+import { GAME_CONFIG, getAdaptiveZoom } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { ITEM_DATA } from '../data/items.js';
 import { LevelSystem } from '../systems/LevelSystem.js';
@@ -76,9 +76,7 @@ export class TownScene extends Phaser.Scene {
 
     // Camera — adaptive zoom for mobile
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-    const screenW = this.scale.width;
-    const mobileZoom = screenW < 480 ? 1.6 : screenW < 768 ? 1.8 : 2;
-    this.cameras.main.setZoom(mobileZoom);
+    this.cameras.main.setZoom(getAdaptiveZoom(this.scale.width));
 
     // Walls
     this.physics.add.collider(this.player, this.wallLayer);

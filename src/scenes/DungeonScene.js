@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG, getDirection } from '../config.js';
+import { GAME_CONFIG, getDirection, getAdaptiveZoom } from '../config.js';
 import { RoomGraph } from '../systems/RoomGraph.js';
 import { DungeonGenerator } from '../systems/DungeonGenerator.js';
 import { ThreatBudgetSpawner } from '../systems/ThreatBudgetSpawner.js';
@@ -72,9 +72,7 @@ export class DungeonScene extends Phaser.Scene {
     this.loadRoom(this.currentRoomId);
 
     // Camera — adaptive zoom based on screen size for better mobile experience
-    const screenW = this.scale.width;
-    const mobileZoom = screenW < 480 ? 1.6 : screenW < 768 ? 1.8 : 2;
-    this.cameras.main.setZoom(mobileZoom);
+    this.cameras.main.setZoom(getAdaptiveZoom(this.scale.width));
 
     // E key
     this.interactKey = this.input.keyboard.addKey('E');
