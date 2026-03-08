@@ -702,7 +702,6 @@ export class DungeonScene extends Phaser.Scene {
     this.waveActive = true;
 
     const room = this.roomData;
-    const node = this.graph.rooms[roomId];
     for (const spawn of wave) {
       // Pick random floor tile inside the room (avoid borders & obstacles)
       let ex, ey, attempts = 0;
@@ -1549,9 +1548,15 @@ export class DungeonScene extends Phaser.Scene {
 
   /** Projectile hits the player */
   _onProjectileHitPlayer(obj1, obj2) {
-    // Phaser may pass arguments in either order
-    const projectile = obj1.damage !== undefined ? obj1 : obj2;
-    const player = obj1.damage !== undefined ? obj2 : obj1;
+    // Identify which object is the projectile (belongs to projectiles group)
+    let projectile, player;
+    if (this.projectiles.contains(obj1)) {
+      projectile = obj1;
+      player = obj2;
+    } else {
+      projectile = obj2;
+      player = obj1;
+    }
     if (!player.active || !projectile.active) return;
     if (typeof player.takeDamage !== 'function') return;
     const damage = projectile.damage || 5;

@@ -62,6 +62,11 @@ export const GAME_CONFIG = {
   TORCH_COUNT_MAX: 4,
   DEBRIS_COUNT_MIN: 1,
   DEBRIS_COUNT_MAX: 3,
+
+  // Boss variants
+  BOSS_HP_MULTIPLIER: 2.5,
+  BOSS_ATTACK_MULTIPLIER: 1.6,
+  BOSS_SPRITE_SCALE: 0.6,
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/enemies.js';
-import { getDirection } from '../config.js';
+import { GAME_CONFIG, getDirection } from '../config.js';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, enemyType, opts = {}) {
@@ -23,14 +23,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Boss variant: boosted stats + visual indicator
     this.isBoss = !!opts.isBoss;
-    const hpMult = this.isBoss ? 2.5 : 1;
-    const atkMult = this.isBoss ? 1.6 : 1;
+    const hpMult = this.isBoss ? GAME_CONFIG.BOSS_HP_MULTIPLIER : 1;
+    const atkMult = this.isBoss ? GAME_CONFIG.BOSS_ATTACK_MULTIPLIER : 1;
     this.hp = Math.floor(data.hp * hpMult);
     this.maxHp = this.hp;
     this.bossAttack = Math.floor(data.attack * atkMult);
 
     // Physics setup
-    const spriteScale = this.isBoss ? 0.6 : 0.45;
+    const spriteScale = this.isBoss ? GAME_CONFIG.BOSS_SPRITE_SCALE : 0.45;
     this.setScale(spriteScale);
     const bodySize = data.spriteSize * 0.35;
     const bodyOffset = (data.spriteSize - bodySize) / 2;
@@ -67,7 +67,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hpBar = this.scene.add.graphics();
     this.hpBar.setDepth(15);
     if (this.isBoss) {
-      const name = `⚔ ${this.data_.name}`;
+      const name = `BOSS ${this.data_.name}`;
       this._bossLabel = this.scene.add.text(this.x, this.y - this.displayHeight / 2 - 16, name, {
         fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 2,
