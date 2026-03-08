@@ -459,7 +459,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.player || !this.player.active) return;
 
     // Wider interaction range for touch (fat-finger tolerance)
-    const touchRange = 45;
+    const touchRange = GAME_CONFIG.TILE_SIZE * 1.40625; // ≈45px when TILE_SIZE is 32
 
     // Check dungeon entrance
     if (this.dungeonZone) {
