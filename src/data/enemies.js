@@ -92,4 +92,35 @@ export const ENEMY_DATA = {
       attack: { frames: 4, prefix: 'temple-beetle-attack' },
     },
   },
+  'wardens-keyling': {
+    name: "Warden's Keyling",
+    hp: 25,
+    attack: 7,
+    speed: 65,
+    chaseSpeed: 125,
+    aggroRange: 140,
+    attackRange: 32,
+    attackCooldown: 900,
+    spriteSize: 48,
+    gold: { min: 3, max: 7 },
+    exp: 14,
+    threatValue: 2,
+    drops: [
+      {
+        itemId: 'copper-fragment',
+        chanceMin: 0.55,
+        chanceMax: 0.70,
+        quantityWeights: [
+          { qty: 1, weight: 60 },
+          { qty: 2, weight: 30 },
+          { qty: 3, weight: 10 },
+        ],
+      },
+    ],
+    animations: {
+      idle: { frames: 1, prefix: 'wardens-keyling-idle' },
+      walk: { frames: 1, prefix: 'wardens-keyling-walk' },
+      attack: { frames: 1, prefix: 'wardens-keyling-attack' },
+    },
+  },
 };

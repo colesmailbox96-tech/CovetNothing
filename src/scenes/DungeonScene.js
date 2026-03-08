@@ -1466,6 +1466,7 @@ export class DungeonScene extends Phaser.Scene {
       'sand-stalker':   [0xccaa55, 0xffcc44, 0xbb8833],
       'weeping-widow':  [0x88aacc, 0xaaccee, 0x667788],
       'temple-beetle':  [0x88aa44, 0xaacc66, 0x556633],
+      'wardens-keyling': [0xcc7744, 0xee9966, 0xaa5522],
     };
     const palette = colors[enemyType] || [0xffffff, 0xcccccc, 0x999999];
     const count = 8;
@@ -1642,7 +1643,7 @@ export class DungeonScene extends Phaser.Scene {
     for (const drop of drops) {
       this.inventory.addItem(drop.itemId, drop.quantity);
       this.runStats.recordItemFound();
-      this.showPopup(data.x, data.y + 10, `+${drop.name}`, '#ffffff');
+      this.showPopup(data.x, data.y + 10, `+${drop.name}${drop.quantity > 1 ? ' x' + drop.quantity : ''}`, '#ffffff');
     }
 
     this._checkCombatCleared();

@@ -28,14 +28,33 @@ export class LootSystem {
 
     const drops = [];
     for (const drop of data.drops) {
-      if (Math.random() <= drop.chance) {
+      // Support variable chance range (chanceMin/chanceMax) or fixed chance
+      const chance = (drop.chanceMin != null && drop.chanceMax != null)
+        ? drop.chanceMin + Math.random() * (drop.chanceMax - drop.chanceMin)
+        : drop.chance;
+
+      if (Math.random() <= chance) {
         const item = ITEM_DATA[drop.itemId];
         if (item) {
+          // Support weighted quantity distribution or default to 1
+          let quantity = 1;
+          if (drop.quantityWeights) {
+            const totalWeight = drop.quantityWeights.reduce((s, w) => s + w.weight, 0);
+            let roll = Math.random() * totalWeight;
+            for (const entry of drop.quantityWeights) {
+              roll -= entry.weight;
+              if (roll <= 0) {
+                quantity = entry.qty;
+                break;
+              }
+            }
+          }
+
           drops.push({
             itemId: drop.itemId,
             name: item.name,
             icon: item.icon,
-            quantity: 1,
+            quantity,
           });
         }
       }

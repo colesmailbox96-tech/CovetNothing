@@ -105,11 +105,17 @@ export class BootScene extends Phaser.Scene {
     // Generate procedural textures for Sand Stalker
     this.generateSandStalkerTextures();
 
+    // Generate procedural textures for Warden's Keyling
+    this.generateWardensKeylingTextures();
+
     // Generate projectile texture
     this.generateProjectileTexture();
 
     // Generate decoration textures
     this.generateDecorationTextures();
+
+    // Generate item icons for materials without sprite assets
+    this.generateItemIcons();
 
     // Create all animations
     this.createPlayerAnimations();
@@ -339,6 +345,84 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0x3a2a4a, 0.6);
     g.fillRect(7, 0, 2, 24);
     g.generateTexture('deco-pillar', 16, 24);
+    g.clear();
+
+    g.destroy();
+  }
+
+  /** Procedurally generate Warden's Keyling textures (small copper key-like creature) */
+  generateWardensKeylingTextures() {
+    const size = 48;
+    const g = this.add.graphics();
+
+    for (const dir of DIRS) {
+      g.clear();
+
+      // Copper glow aura
+      g.fillStyle(0xcc7744, 0.12);
+      g.fillCircle(size / 2, size / 2, 20);
+
+      // Body — compact copper-colored oval
+      g.fillStyle(0xbb6633, 0.85);
+      g.fillEllipse(size / 2, size / 2 + 2, 18, 22);
+
+      // Metallic sheen
+      g.fillStyle(0xdd8844, 0.5);
+      g.fillEllipse(size / 2 - 2, size / 2 - 1, 12, 16);
+
+      // Key-shaped crest on head
+      g.fillStyle(0xeeaa55, 0.9);
+      g.fillCircle(size / 2, size / 2 - 10, 6);
+      g.fillStyle(0xcc8833, 0.9);
+      g.fillRect(size / 2 - 2, size / 2 - 16, 4, 8);
+
+      // Key teeth (tiny notches at top)
+      g.fillStyle(0xeeaa55, 0.8);
+      g.fillRect(size / 2 - 4, size / 2 - 17, 2, 3);
+      g.fillRect(size / 2 + 2, size / 2 - 17, 2, 3);
+
+      // Eyes — small bright dots based on direction
+      const eyeOffsets = {
+        'south':      [{ x: -4, y: -2 }, { x: 4, y: -2 }],
+        'north':      [{ x: -4, y: -4 }, { x: 4, y: -4 }],
+        'east':       [{ x: 2, y: -3 }, { x: 2, y: 1 }],
+        'west':       [{ x: -2, y: -3 }, { x: -2, y: 1 }],
+        'south-east': [{ x: 0, y: -2 }, { x: 5, y: -1 }],
+        'south-west': [{ x: -5, y: -1 }, { x: 0, y: -2 }],
+        'north-east': [{ x: 0, y: -4 }, { x: 5, y: -3 }],
+        'north-west': [{ x: -5, y: -3 }, { x: 0, y: -4 }],
+      };
+      const eyes = eyeOffsets[dir] || eyeOffsets['south'];
+      g.fillStyle(0xffffff, 0.9);
+      g.fillCircle(size / 2 + eyes[0].x, size / 2 + eyes[0].y, 2.5);
+      g.fillCircle(size / 2 + eyes[1].x, size / 2 + eyes[1].y, 2.5);
+      g.fillStyle(0xff6600, 1);
+      g.fillCircle(size / 2 + eyes[0].x, size / 2 + eyes[0].y, 1.2);
+      g.fillCircle(size / 2 + eyes[1].x, size / 2 + eyes[1].y, 1.2);
+
+      // Small legs/feet at bottom
+      g.fillStyle(0x995522, 0.7);
+      g.fillRect(size / 2 - 6, size / 2 + 10, 3, 5);
+      g.fillRect(size / 2 + 3, size / 2 + 10, 3, 5);
+
+      g.generateTexture(`wardens-keyling-idle-${dir}-0`, size, size);
+    }
+    g.destroy();
+  }
+
+  /** Generate procedural item icons for materials that lack sprite assets */
+  generateItemIcons() {
+    const g = this.add.graphics();
+
+    // Copper Fragment — jagged copper shard (16x16)
+    g.clear();
+    g.fillStyle(0xcc7744, 0.9);
+    g.fillTriangle(3, 13, 8, 1, 13, 11);
+    g.fillStyle(0xee9966, 0.7);
+    g.fillTriangle(5, 12, 8, 3, 11, 10);
+    g.fillStyle(0xffbb88, 0.5);
+    g.fillTriangle(7, 10, 8, 5, 9, 9);
+    g.generateTexture('item-copper-fragment', 16, 16);
     g.clear();
 
     g.destroy();

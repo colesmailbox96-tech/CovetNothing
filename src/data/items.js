@@ -23,6 +23,14 @@ export const ITEM_DATA = {
     stackable: true,
     type: 'material',
   },
+  'copper-fragment': {
+    name: 'Copper Fragment',
+    description: 'A jagged shard of tarnished copper shed by a Warden\'s Keyling.',
+    icon: 'item-copper-fragment',
+    sellPrice: 4,
+    stackable: true,
+    type: 'material',
+  },
 
   // Equipment - Weapons
   'bone-club': {
