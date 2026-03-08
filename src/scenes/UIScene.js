@@ -58,6 +58,11 @@ export class UIScene extends Phaser.Scene {
 
     // Listen for stat updates from game scenes (throttled to avoid 60fps HUD rebuilds)
     this.events.on('updateStats', (data) => {
+      // Clear stale activeEffects when they are not included in the update
+      // (common for TownScene) or when the player is in town.
+      if (data.location === 'town' || !('activeEffects' in data)) {
+        this.stats.activeEffects = [];
+      }
       Object.assign(this.stats, data);
       const now = Date.now();
       const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
