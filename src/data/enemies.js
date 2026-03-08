@@ -123,4 +123,27 @@ export const ENEMY_DATA = {
       attack: { frames: 1, prefix: 'wardens-keyling-attack' },
     },
   },
+  'scarab-swarm': {
+    name: 'Scarab Swarm',
+    hp: 12,
+    attack: 4,
+    speed: 80,
+    chaseSpeed: 140,
+    aggroRange: 160,
+    attackRange: 28,
+    attackCooldown: 700,
+    spriteSize: 40,
+    gold: { min: 1, max: 3 },
+    exp: 6,
+    threatValue: 1,
+    drops: [
+      { itemId: 'temple-ash', chance: 0.3 },
+      { itemId: 'bones', chance: 0.15 },
+    ],
+    animations: {
+      idle: { frames: 1, prefix: 'scarab-swarm-idle' },
+      walk: { frames: 1, prefix: 'scarab-swarm-walk' },
+      attack: { frames: 1, prefix: 'scarab-swarm-attack' },
+    },
+  },
 };

@@ -25,9 +25,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.isBoss = !!opts.isBoss;
     const hpMult = this.isBoss ? GAME_CONFIG.BOSS_HP_MULTIPLIER : 1;
     const atkMult = this.isBoss ? GAME_CONFIG.BOSS_ATTACK_MULTIPLIER : 1;
-    this.hp = Math.floor(data.hp * hpMult);
+
+    // Floor modifier effects
+    const floorMod = opts.floorModifier;
+    const modHpMult = (floorMod && floorMod.effects.enemyHpMultiplier) || 1;
+    const modSpeedMult = (floorMod && floorMod.effects.enemySpeedMultiplier) || 1;
+
+    this.hp = Math.floor(data.hp * hpMult * modHpMult);
     this.maxHp = this.hp;
     this.bossAttack = Math.floor(data.attack * atkMult);
+    this.speedMultiplier = modSpeedMult;
 
     // Physics setup
     const spriteScale = this.isBoss ? GAME_CONFIG.BOSS_SPRITE_SCALE : 0.45;
@@ -284,7 +291,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(0, 0);
       this.playIdle();
     } else {
-      const speed = this.data_.speed;
+      const speed = this.data_.speed * (this.speedMultiplier || 1);
       this.setVelocity(this.patrolDir.x * speed, this.patrolDir.y * speed);
       const dir = getDirection(this.patrolDir.x, this.patrolDir.y);
       if (dir) {
@@ -301,7 +308,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const len = Math.sqrt(dx * dx + dy * dy);
 
     if (len > 0) {
-      const speed = this.data_.chaseSpeed;
+      const speed = this.data_.chaseSpeed * (this.speedMultiplier || 1);
       this.setVelocity((dx / len) * speed, (dy / len) * speed);
       const dir = getDirection(dx, dy);
       if (dir) {
@@ -319,7 +326,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const len = Math.sqrt(dx * dx + dy * dy);
 
     if (len > 0) {
-      const speed = this.data_.chaseSpeed;
+      const speed = this.data_.chaseSpeed * (this.speedMultiplier || 1);
       this.setVelocity((dx / len) * speed, (dy / len) * speed);
       // Face the player while retreating
       const dir = getDirection(-dx, -dy);
