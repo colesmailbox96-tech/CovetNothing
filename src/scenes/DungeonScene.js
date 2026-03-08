@@ -64,6 +64,7 @@ export class DungeonScene extends Phaser.Scene {
     this.doorGroup = this.physics.add.staticGroup();
     this.wallLayer = this.physics.add.staticGroup();
     this.floorGroup = this.add.group();
+    this.projectiles = this.physics.add.group();
     this._wallImages = [];
     this._colliders = [];
 
@@ -86,9 +87,6 @@ export class DungeonScene extends Phaser.Scene {
       this._shakeCamera();
     });
     this.events.on('enemyRangedAttack', this._handleRangedAttack, this);
-
-    // Projectile group (for ranged enemies)
-    this.projectiles = this.physics.add.group();
 
     // Build node minimap
     this.createNodeMinimap();
@@ -1550,8 +1548,12 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   /** Projectile hits the player */
-  _onProjectileHitPlayer(projectile, player) {
+  _onProjectileHitPlayer(obj1, obj2) {
+    // Phaser may pass arguments in either order
+    const projectile = obj1.damage !== undefined ? obj1 : obj2;
+    const player = obj1.damage !== undefined ? obj2 : obj1;
     if (!player.active || !projectile.active) return;
+    if (typeof player.takeDamage !== 'function') return;
     const damage = projectile.damage || 5;
     player.takeDamage(damage);
     this._spawnProjectileImpact(projectile.x, projectile.y);
