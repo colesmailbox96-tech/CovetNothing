@@ -18,6 +18,7 @@ const config = {
   input: {
     activePointers: 4,
     touch: { capture: true },
+    smoothFactor: 0.2,            // Smooth touch pointer movement
   },
   physics: {
     default: 'arcade',
@@ -27,6 +28,15 @@ const config = {
     },
   },
   scene: [BootScene, TownScene, DungeonScene, UIScene],
+  fps: {
+    target: 60,
+    forceSetTimeOut: false,
+  },
+  render: {
+    antialias: false,
+    pixelArt: true,
+    powerPreference: 'high-performance',
+  },
 };
 
 const game = new Phaser.Game(config);

@@ -71,8 +71,10 @@ export class DungeonScene extends Phaser.Scene {
     // Load the starting room
     this.loadRoom(this.currentRoomId);
 
-    // Camera
-    this.cameras.main.setZoom(2);
+    // Camera — adaptive zoom based on screen size for better mobile experience
+    const screenW = this.scale.width;
+    const mobileZoom = screenW < 480 ? 1.6 : screenW < 768 ? 1.8 : 2;
+    this.cameras.main.setZoom(mobileZoom);
 
     // E key
     this.interactKey = this.input.keyboard.addKey('E');
@@ -412,7 +414,7 @@ export class DungeonScene extends Phaser.Scene {
     const worldH = roomData.height * this.tileSize;
     this.physics.world.setBounds(0, 0, worldW, worldH);
     this.cameras.main.setBounds(0, 0, worldW, worldH);
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
     this.player.setDepth(10);
 
     // If this room has enemies and isn't cleared, start combat
@@ -644,11 +646,11 @@ export class DungeonScene extends Phaser.Scene {
     const returnDoor = targetNode.doors.find(d => d.targetRoom === this.currentRoomId);
     const entryDir = returnDoor ? returnDoor.direction : null;
 
-    // Fade out → load new room → fade in
-    this.cameras.main.fadeOut(300, 0, 0, 0);
+    // Fade out → load new room → fade in (snappy 150ms for responsive feel)
+    this.cameras.main.fadeOut(150, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.loadRoom(targetRoomId, entryDir);
-      this.cameras.main.fadeIn(300, 0, 0, 0);
+      this.cameras.main.fadeIn(150, 0, 0, 0);
     });
   }
 
@@ -1262,12 +1264,15 @@ export class DungeonScene extends Phaser.Scene {
   handleTouchInteract() {
     if (!this.player || !this.player.active) return;
 
+    // Wider interaction range for touch (fat-finger tolerance)
+    const touchRange = this.tileSize * 2.2;
+
     for (const door of this.doors) {
       if (door.state !== 'closed') continue;
       const dwx = door.tileX * this.tileSize + this.tileSize / 2;
       const dwy = door.tileY * this.tileSize + this.tileSize / 2;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, dwx, dwy);
-      if (dist < this.tileSize * 1.5) {
+      if (dist < touchRange) {
         this._openDoor(door);
         return;
       }
@@ -1278,7 +1283,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.x, this.player.y,
         this.craftingBench.x, this.craftingBench.y
       );
-      if (dist < this.tileSize * 1.5) {
+      if (dist < touchRange) {
         const uiScene = this.scene.get('UIScene');
         if (uiScene) {
           uiScene.showCraftingPanel(this.inventory);
@@ -1292,7 +1297,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.x, this.player.y,
         this.treasureChest.x, this.treasureChest.y
       );
-      if (dist < this.tileSize * 1.5) {
+      if (dist < touchRange) {
         this._openTreasureChest();
         return;
       }
@@ -1303,7 +1308,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.x, this.player.y,
         this.campfire.x, this.campfire.y
       );
-      if (dist < this.tileSize * 1.5) {
+      if (dist < touchRange) {
         this._useCampfire();
         return;
       }
@@ -1314,7 +1319,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.x, this.player.y,
         this.merchant.x, this.merchant.y
       );
-      if (dist < this.tileSize * 1.5) {
+      if (dist < touchRange) {
         this._openMerchantShop();
         return;
       }
@@ -1325,7 +1330,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.x, this.player.y,
         this.stairs.x, this.stairs.y
       );
-      if (dist < this.tileSize) {
+      if (dist < this.tileSize * 1.5) {
         this.goToNextFloor();
       }
     }
@@ -1709,13 +1714,15 @@ export class DungeonScene extends Phaser.Scene {
 
   findNearestEnemyInRange() {
     const reach = GAME_CONFIG.PLAYER_ATTACK_REACH;
+    // Extended range for mobile auto-targeting (generous lock-on radius)
+    const scanRange = reach + 40;
     let nearest = null;
     let nearestDist = Infinity;
     const enemies = this.enemies.getChildren();
     for (const enemy of enemies) {
       if (!enemy.active || enemy.state === 'dead') continue;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
-      if (dist < reach + 20 && dist < nearestDist) {
+      if (dist < scanRange && dist < nearestDist) {
         nearest = enemy;
         nearestDist = dist;
       }

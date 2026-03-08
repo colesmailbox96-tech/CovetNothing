@@ -74,9 +74,11 @@ export class TownScene extends Phaser.Scene {
     this.player = new Player(this, spawnX, spawnY, this.levelSystem);
     this.player.hp = this.player.getMaxHP(); // Full heal in town
 
-    // Camera
+    // Camera — adaptive zoom for mobile
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-    this.cameras.main.setZoom(2);
+    const screenW = this.scale.width;
+    const mobileZoom = screenW < 480 ? 1.6 : screenW < 768 ? 1.8 : 2;
+    this.cameras.main.setZoom(mobileZoom);
 
     // Walls
     this.physics.add.collider(this.player, this.wallLayer);
@@ -458,13 +460,16 @@ export class TownScene extends Phaser.Scene {
   handleTouchInteract() {
     if (!this.player || !this.player.active) return;
 
+    // Wider interaction range for touch (fat-finger tolerance)
+    const touchRange = 45;
+
     // Check dungeon entrance
     if (this.dungeonZone) {
       const dist = Phaser.Math.Distance.Between(
         this.player.x, this.player.y,
         this.dungeonEntrance.x, this.dungeonEntrance.y
       );
-      if (dist < 30) {
+      if (dist < touchRange) {
         this.scene.start('DungeonScene', { floor: 1 });
         return;
       }
@@ -477,7 +482,7 @@ export class TownScene extends Phaser.Scene {
           this.player.x, this.player.y,
           zone.x, zone.y
         );
-        if (dist < 30 && zone.npcCallback) {
+        if (dist < touchRange && zone.npcCallback) {
           zone.npcCallback();
           return;
         }
