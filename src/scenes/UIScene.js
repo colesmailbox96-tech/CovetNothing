@@ -626,7 +626,7 @@ export class UIScene extends Phaser.Scene {
           abLabel = `${ab.icon} ${ab.name} (Lv${ab.unlockLevel})`;
           abColor = '#444444';
         } else if (ab.ready) {
-          abLabel = `${ab.icon} ${ab.name} Ready (${ab.key === 'ONE' ? '1' : '2'})`;
+          abLabel = `${ab.icon} ${ab.name} Ready (${ab.keyDisplay})`;
           abColor = '#44ffaa';
         } else {
           abLabel = `${ab.icon} ${ab.name} (${ab.cooldownSec.toFixed(1)}s)`;

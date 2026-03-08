@@ -15,7 +15,8 @@ export const ABILITIES = {
     cooldown: 8000,      // ms
     range: 70,           // px radius of AoE
     damageMultiplier: 0.8, // % of player attack
-    key: 'ONE',
+    keyCode: 'ONE',
+    keyDisplay: '1',
   },
   war_cry: {
     id: 'war_cry',
@@ -28,7 +29,8 @@ export const ABILITIES = {
     knockbackForce: 250, // px/s
     buffDuration: 10000, // ms
     buffMagnitude: 5,    // +ATK
-    key: 'TWO',
+    keyCode: 'TWO',
+    keyDisplay: '2',
   },
 };
 
@@ -81,7 +83,7 @@ export class AbilitySystem {
       id: a.id,
       name: a.name,
       icon: a.icon,
-      key: a.key,
+      keyDisplay: a.keyDisplay,
       unlocked: playerLevel >= a.unlockLevel,
       unlockLevel: a.unlockLevel,
       ready: this.isReady(a.id),

@@ -400,7 +400,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Boss special ability — alternates between ground slam and charge */
   doBossAbility(player, dist) {
-    if (this.bossAbilityType === 'slam' && dist < GAME_CONFIG.BOSS_SLAM_RANGE * 1.5) {
+    const slamTrigger = GAME_CONFIG.BOSS_SLAM_RANGE * GAME_CONFIG.BOSS_SLAM_TRIGGER_RANGE;
+    if (this.bossAbilityType === 'slam' && dist < slamTrigger) {
       this.doGroundSlam(player);
     } else if (this.bossAbilityType === 'charge' && dist > GAME_CONFIG.BOSS_SLAM_RANGE) {
       this.doCharge(player);
@@ -410,7 +411,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.doChase(player);
       } else {
         // Switch to slam if close enough
-        if (dist < GAME_CONFIG.BOSS_SLAM_RANGE * 1.5) {
+        if (dist < slamTrigger) {
           this.bossAbilityType = 'slam';
           this.doGroundSlam(player);
         } else {
@@ -555,7 +556,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         // Check if we hit the player
         const hitDist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
-        if (hitDist < 45 && player.active && player.hp > 0) {
+        if (hitDist < GAME_CONFIG.BOSS_CHARGE_HIT_RADIUS && player.active && player.hp > 0) {
           const damage = Math.floor(this.bossAttack * GAME_CONFIG.BOSS_CHARGE_DAMAGE_MULT);
           player.takeDamage(damage, this.x, this.y);
         }

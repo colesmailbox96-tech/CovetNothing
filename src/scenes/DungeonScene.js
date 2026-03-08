@@ -1816,7 +1816,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // Freeze gameplay
     this.player.setVelocity(0, 0);
-    this.player.body.enable = false;
+    if (this.player.body) this.player.body.enable = false;
 
     // Show death summary
     const summary = this.runStats.getSummary();
