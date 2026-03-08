@@ -595,8 +595,6 @@ export class UIScene extends Phaser.Scene {
     // Floor modifier indicator (dungeon only, when not calm)
     const floorMod = this.stats.floorModifier;
     if (this.stats.location === 'dungeon' && floorMod && floorMod.id !== 'none') {
-      const player = this.getActivePlayer();
-      const dashReady = !player || (player.dashCooldown <= 0 && !player.isDashing);
       const dashOffset = this.stats.location === 'dungeon' ? effectLineHeight : 0;
       const modY = potionCount > 0
         ? potionY + 12 + effects.length * effectLineHeight + dashOffset

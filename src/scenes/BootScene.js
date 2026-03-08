@@ -473,7 +473,10 @@ export class BootScene extends Phaser.Scene {
         g.fillCircle(bx + 1, by - 2, 0.8);
       }
 
+      // Generate same texture for idle, walk, and attack (single-frame procedural)
       g.generateTexture(`scarab-swarm-idle-${dir}-0`, size, size);
+      g.generateTexture(`scarab-swarm-walk-${dir}-0`, size, size);
+      g.generateTexture(`scarab-swarm-attack-${dir}-0`, size, size);
     }
     g.destroy();
   }
