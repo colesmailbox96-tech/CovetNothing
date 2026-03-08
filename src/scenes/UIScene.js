@@ -35,7 +35,6 @@ export class UIScene extends Phaser.Scene {
     // HUD throttle: avoid destroying/recreating all UI elements every frame
     this._lastHUDUpdateTime = 0;
     this._lastHUDStatsJSON = '';
-    this._pendingHUDUpdate = false;
 
     // Read iOS safe area insets from CSS environment variables
     this.safeArea = { top: 0, right: 0, bottom: 0, left: 0 };
