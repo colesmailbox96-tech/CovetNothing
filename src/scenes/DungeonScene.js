@@ -13,6 +13,7 @@ import { ITEM_DATA } from '../data/items.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
 import { getRandomDescription } from '../data/roomDescriptions.js';
+import { pickFloorModifier } from '../data/floorModifiers.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -39,6 +40,8 @@ export class DungeonScene extends Phaser.Scene {
     }
     // Record floor on entry
     this.runStats.recordFloorDescended(this.currentFloor);
+    // Pick floor modifier for this floor
+    this.floorModifier = pickFloorModifier(this.currentFloor);
   }
 
   create() {
@@ -90,6 +93,11 @@ export class DungeonScene extends Phaser.Scene {
 
     // Build node minimap
     this.createNodeMinimap();
+
+    // Announce floor modifier (if not calm)
+    if (this.floorModifier && this.floorModifier.id !== 'none') {
+      this._showFloorModifierAnnouncement();
+    }
 
     // Initial UI
     this.updateUI();
@@ -378,6 +386,12 @@ export class DungeonScene extends Phaser.Scene {
       this._createDecorations(roomData.decorations);
     }
 
+    // Breakable pots
+    this.pots = [];
+    if (roomData.potPositions && roomData.potPositions.length > 0) {
+      this._createPots(roomData.potPositions);
+    }
+
     // Doors
     this.doors = [];
     this._createDoors(node, roomData);
@@ -396,6 +410,8 @@ export class DungeonScene extends Phaser.Scene {
       this.player.setPosition(px, py);
       this.player.setVelocity(0, 0);
     }
+    // Pass floor modifier to player for damage calculations
+    this.player.floorModifier = this.floorModifier || null;
 
     // Collisions (track so we can clean them up on next room load)
     this._colliders = [
@@ -503,6 +519,14 @@ export class DungeonScene extends Phaser.Scene {
       }
     }
     this.decorations = [];
+
+    // Breakable pots
+    if (this.pots) {
+      for (const pot of this.pots) {
+        if (pot.sprite) pot.sprite.destroy();
+      }
+    }
+    this.pots = [];
 
     // Wall visuals stored separately
     if (this._wallImages) {
@@ -715,6 +739,7 @@ export class DungeonScene extends Phaser.Scene {
       const epy = ey * this.tileSize + this.tileSize / 2;
       const enemy = new Enemy(this, epx, epy, spawn.type, {
         isBoss: !!spawn.isBoss,
+        floorModifier: this.floorModifier,
       });
       enemy.roomIndex = roomId;
       this.enemies.add(enemy);
@@ -891,6 +916,117 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
+  _createPots(potPositions) {
+    for (const pos of potPositions) {
+      const px = pos.x * this.tileSize + this.tileSize / 2;
+      const py = pos.y * this.tileSize + this.tileSize / 2;
+      const sprite = this.add.image(px, py, 'deco-pot').setDepth(2);
+      this.pots.push({
+        sprite,
+        tileX: pos.x,
+        tileY: pos.y,
+        broken: false,
+      });
+    }
+  }
+
+  /** Check if player's attack hits any breakable pots */
+  _checkPotBreaks(attackX, attackY, reach) {
+    if (!this.pots) return;
+    for (const pot of this.pots) {
+      if (pot.broken) continue;
+      const dist = Phaser.Math.Distance.Between(attackX, attackY, pot.sprite.x, pot.sprite.y);
+      if (dist < reach + 16) {
+        this._breakPot(pot);
+      }
+    }
+  }
+
+  _breakPot(pot) {
+    pot.broken = true;
+    pot.sprite.setTexture('deco-pot-broken');
+    pot.sprite.setAlpha(0.6);
+    pot.sprite.setDepth(1);
+
+    // Spawn break particles
+    for (let i = 0; i < 4; i++) {
+      const particle = this.add.circle(
+        pot.sprite.x, pot.sprite.y,
+        Phaser.Math.Between(1, 3), 0x8a5a2a, 0.8
+      ).setDepth(20);
+      const angle = (Math.PI * 2 * i) / 4 + (Math.random() - 0.5) * 0.8;
+      const dist = Phaser.Math.Between(10, 25);
+      this.tweens.add({
+        targets: particle,
+        x: pot.sprite.x + Math.cos(angle) * dist,
+        y: pot.sprite.y + Math.sin(angle) * dist,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => particle.destroy(),
+      });
+    }
+
+    // Drop loot
+    const goldAmount = Phaser.Math.Between(GAME_CONFIG.POT_GOLD_MIN, GAME_CONFIG.POT_GOLD_MAX);
+    const modMult = (this.floorModifier && this.floorModifier.effects.goldMultiplier) || 1;
+    const finalGold = Math.floor(goldAmount * modMult);
+    if (finalGold > 0) {
+      this.levelSystem.addGold(finalGold);
+      this.runStats.recordGold(finalGold);
+      this.showPopup(pot.sprite.x, pot.sprite.y - 12, `+${finalGold}g`, '#ffdd44');
+    }
+
+    // Small chance to drop an item
+    if (Math.random() < GAME_CONFIG.POT_ITEM_CHANCE) {
+      const possibleDrops = ['temple-ash', 'bones', 'health-potion'];
+      const dropId = possibleDrops[Math.floor(Math.random() * possibleDrops.length)];
+      this.inventory.addItem(dropId, 1);
+      this.runStats.recordItemFound();
+      const itemData = ITEM_DATA[dropId];
+      const name = itemData ? itemData.name : dropId;
+      this.showPopup(pot.sprite.x, pot.sprite.y - 26, `+${name}`, '#ffffff');
+    }
+
+    this.updateUI();
+  }
+
+  /** Show floor modifier announcement at start of a new floor */
+  _showFloorModifierAnnouncement() {
+    const mod = this.floorModifier;
+    const room = this.roomData;
+    const cx = Math.floor(room.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = 30;
+
+    const titleText = this.add.text(cx, cy, `${mod.icon} ${mod.name}`, {
+      fontSize: '14px',
+      fill: mod.color,
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 3,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(30).setAlpha(0);
+
+    const descText = this.add.text(cx, cy + 18, mod.description, {
+      fontSize: '9px',
+      fill: '#cccccc',
+      fontFamily: 'monospace',
+      fontStyle: 'italic',
+      stroke: '#000000',
+      strokeThickness: 2,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(30).setAlpha(0);
+
+    this.tweens.add({
+      targets: [titleText, descText],
+      alpha: 1,
+      duration: 400,
+      hold: 3000,
+      yoyo: true,
+      onComplete: () => { titleText.destroy(); descText.destroy(); },
+    });
+  }
+
   _checkTraps(delta) {
     if (!this.player || !this.player.active || !this.traps) return;
     for (const trap of this.traps) {
@@ -915,7 +1051,9 @@ export class DungeonScene extends Phaser.Scene {
         trap.cooldown = GAME_CONFIG.TRAP_COOLDOWN;
         trap.sprite.setTexture('tile-trap-active');
 
-        const damage = GAME_CONFIG.TRAP_BASE_DAMAGE + (this.currentFloor - 1) * GAME_CONFIG.TRAP_DAMAGE_PER_FLOOR;
+        const baseDamage = GAME_CONFIG.TRAP_BASE_DAMAGE + (this.currentFloor - 1) * GAME_CONFIG.TRAP_DAMAGE_PER_FLOOR;
+        const trapMult = (this.floorModifier && this.floorModifier.effects.trapDamageMultiplier) || 1;
+        const damage = Math.floor(baseDamage * trapMult);
         this.player.takeDamage(damage);
         this.runStats.recordTrapTriggered();
 
@@ -1467,6 +1605,7 @@ export class DungeonScene extends Phaser.Scene {
       'weeping-widow':  [0x88aacc, 0xaaccee, 0x667788],
       'temple-beetle':  [0x88aa44, 0xaacc66, 0x556633],
       'wardens-keyling': [0xcc7744, 0xee9966, 0xaa5522],
+      'scarab-swarm':   [0x445533, 0x668844, 0xccff66],
     };
     const palette = colors[enemyType] || [0xffffff, 0xcccccc, 0x999999];
     const count = 8;
@@ -1590,6 +1729,12 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   handlePlayerAttack(attackData) {
+    // Check if attack hits any breakable pots
+    this._checkPotBreaks(attackData.x, attackData.y, attackData.reach);
+
+    // Apply floor modifier damage bonus
+    const dmgMult = (this.floorModifier && this.floorModifier.effects.playerDamageMultiplier) || 1;
+
     const enemies = this.enemies.getChildren();
     for (const enemy of enemies) {
       if (!enemy.active || enemy.state === 'dead') continue;
@@ -1597,9 +1742,10 @@ export class DungeonScene extends Phaser.Scene {
       if (dist < attackData.reach + 20) {
         // Roll for critical hit
         const isCrit = Math.random() < GAME_CONFIG.CRIT_CHANCE;
-        const finalDamage = isCrit
+        const baseDamage = isCrit
           ? Math.floor(attackData.damage * GAME_CONFIG.CRIT_MULTIPLIER)
           : attackData.damage;
+        const finalDamage = Math.floor(baseDamage * dmgMult);
 
         enemy.takeDamage(finalDamage);
         this.runStats.recordDamageDealt(finalDamage);
@@ -1621,10 +1767,16 @@ export class DungeonScene extends Phaser.Scene {
     // Death particles
     this._spawnDeathParticles(data.x, data.y, data.enemyType);
 
-    const goldAmount = this.levelSystem.getScaledGold(
+    // Apply floor modifier multipliers
+    const goldMult = (this.floorModifier && this.floorModifier.effects.goldMultiplier) || 1;
+    const expMult = (this.floorModifier && this.floorModifier.effects.expMultiplier) || 1;
+
+    const baseGold = this.levelSystem.getScaledGold(
       enemyData.gold.min, enemyData.gold.max, this.currentFloor
     );
-    const expAmount = this.levelSystem.getScaledExp(enemyData.exp, this.currentFloor);
+    const baseExp = this.levelSystem.getScaledExp(enemyData.exp, this.currentFloor);
+    const goldAmount = Math.floor(baseGold * goldMult);
+    const expAmount = Math.floor(baseExp * expMult);
 
     this.levelSystem.addGold(goldAmount);
     this.runStats.recordGold(goldAmount);
@@ -1691,6 +1843,7 @@ export class DungeonScene extends Phaser.Scene {
 
   updateUI() {
     if (!this.player) return;
+    const modBonusDef = (this.floorModifier && this.floorModifier.effects.bonusDefense) || 0;
     this.scene.get('UIScene').events.emit('updateStats', {
       hp: this.player.hp,
       maxHp: this.player.getMaxHP(),
@@ -1700,7 +1853,7 @@ export class DungeonScene extends Phaser.Scene {
       gold: this.levelSystem.gold,
       floor: this.currentFloor,
       attack: this.levelSystem.getAttack(),
-      defense: this.levelSystem.getDefense(),
+      defense: this.levelSystem.getDefense() + modBonusDef,
       equipment: {
         weapon: this.equipmentSystem ? this.equipmentSystem.getEquipped('weapon') : null,
         armor: this.equipmentSystem ? this.equipmentSystem.getEquipped('armor') : null,
@@ -1708,6 +1861,7 @@ export class DungeonScene extends Phaser.Scene {
       location: 'dungeon',
       inventory: this.inventory.getItems(),
       activeEffects: this.statusEffects ? this.statusEffects.getActiveEffects() : [],
+      floorModifier: this.floorModifier || null,
     });
   }
 

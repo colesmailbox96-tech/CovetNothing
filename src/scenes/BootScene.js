@@ -108,6 +108,9 @@ export class BootScene extends Phaser.Scene {
     // Generate procedural textures for Warden's Keyling
     this.generateWardensKeylingTextures();
 
+    // Generate procedural textures for Scarab Swarm
+    this.generateScarabSwarmTextures();
+
     // Generate projectile texture
     this.generateProjectileTexture();
 
@@ -347,6 +350,30 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('deco-pillar', 16, 24);
     g.clear();
 
+    // Breakable pot / urn (16x16)
+    g.fillStyle(0x8a5a2a, 1);
+    g.fillEllipse(8, 10, 12, 12);
+    g.fillStyle(0x7a4a1a, 0.9);
+    g.fillRect(5, 3, 6, 5);
+    g.fillStyle(0x9a6a3a, 0.7);
+    g.fillEllipse(8, 9, 8, 8);
+    g.fillStyle(0x6a3a10, 0.5);
+    g.fillRect(6, 14, 4, 2);
+    g.generateTexture('deco-pot', 16, 16);
+    g.clear();
+
+    // Broken pot (16x16) — shown after a pot is destroyed
+    g.fillStyle(0x6a3a10, 0.7);
+    g.fillRect(2, 10, 5, 4);
+    g.fillRect(9, 11, 4, 3);
+    g.fillStyle(0x8a5a2a, 0.5);
+    g.fillTriangle(4, 8, 7, 12, 2, 13);
+    g.fillTriangle(10, 7, 13, 11, 8, 12);
+    g.fillStyle(0x9a6a3a, 0.3);
+    g.fillRect(5, 13, 6, 2);
+    g.generateTexture('deco-pot-broken', 16, 16);
+    g.clear();
+
     g.destroy();
   }
 
@@ -406,6 +433,50 @@ export class BootScene extends Phaser.Scene {
       g.fillRect(size / 2 + 3, size / 2 + 10, 3, 5);
 
       g.generateTexture(`wardens-keyling-idle-${dir}-0`, size, size);
+    }
+    g.destroy();
+  }
+
+  /** Procedurally generate Scarab Swarm textures (cluster of small beetles) */
+  generateScarabSwarmTextures() {
+    const size = 40;
+    const g = this.add.graphics();
+
+    for (const dir of DIRS) {
+      g.clear();
+
+      // Ground shadow / swarm aura
+      g.fillStyle(0x334422, 0.15);
+      g.fillCircle(size / 2, size / 2, 16);
+
+      // Multiple small beetle bodies
+      const positions = [
+        { x: 0, y: 0 }, { x: -6, y: -5 }, { x: 6, y: -4 },
+        { x: -4, y: 5 }, { x: 5, y: 6 }, { x: -8, y: 1 },
+      ];
+
+      for (const pos of positions) {
+        const bx = size / 2 + pos.x;
+        const by = size / 2 + pos.y;
+
+        // Body
+        g.fillStyle(0x445533, 0.9);
+        g.fillEllipse(bx, by, 6, 5);
+
+        // Shell shine
+        g.fillStyle(0x668844, 0.6);
+        g.fillEllipse(bx, by - 1, 4, 3);
+
+        // Tiny eye dots
+        g.fillStyle(0xccff66, 0.8);
+        g.fillCircle(bx - 1, by - 2, 0.8);
+        g.fillCircle(bx + 1, by - 2, 0.8);
+      }
+
+      // Generate same texture for idle, walk, and attack (single-frame procedural)
+      g.generateTexture(`scarab-swarm-idle-${dir}-0`, size, size);
+      g.generateTexture(`scarab-swarm-walk-${dir}-0`, size, size);
+      g.generateTexture(`scarab-swarm-attack-${dir}-0`, size, size);
     }
     g.destroy();
   }

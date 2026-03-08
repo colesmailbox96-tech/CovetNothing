@@ -67,6 +67,13 @@ export const GAME_CONFIG = {
   BOSS_HP_MULTIPLIER: 2.5,
   BOSS_ATTACK_MULTIPLIER: 1.6,
   BOSS_SPRITE_SCALE: 0.6,
+
+  // Breakable pots
+  POT_COUNT_MIN: 2,
+  POT_COUNT_MAX: 5,
+  POT_GOLD_MIN: 1,
+  POT_GOLD_MAX: 4,
+  POT_ITEM_CHANCE: 0.2,        // 20% chance a pot drops an item
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];

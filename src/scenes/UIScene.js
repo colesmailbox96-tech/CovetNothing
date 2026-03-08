@@ -64,7 +64,7 @@ export class UIScene extends Phaser.Scene {
       }
       Object.assign(this.stats, data);
       const now = Date.now();
-      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
+      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.floorModifier || {}).id || ''}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
 
       // If the fingerprint hasn't changed, skip any HUD work entirely.
       if (statsJSON === this._lastHUDStatsJSON) {
@@ -471,7 +471,8 @@ export class UIScene extends Phaser.Scene {
     const effectLineHeight = 11;
     const effectCount = (this.stats.activeEffects || []).length;
     const hasDashIndicator = this.stats.location === 'dungeon' ? 1 : 0;
-    const panelHeight = 125 + (effectCount + hasDashIndicator) * effectLineHeight;
+    const hasFloorMod = (this.stats.location === 'dungeon' && this.stats.floorModifier && this.stats.floorModifier.id !== 'none') ? 1 : 0;
+    const panelHeight = 125 + (effectCount + hasDashIndicator + hasFloorMod) * effectLineHeight;
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
       barWidth + pad * 3, panelHeight,
@@ -589,6 +590,21 @@ export class UIScene extends Phaser.Scene {
         stroke: '#000000', strokeThickness: 1,
       });
       this.uiContainer.add(dashText);
+    }
+
+    // Floor modifier indicator (dungeon only, when not calm)
+    const floorMod = this.stats.floorModifier;
+    if (this.stats.location === 'dungeon' && floorMod && floorMod.id !== 'none') {
+      const dashOffset = this.stats.location === 'dungeon' ? effectLineHeight : 0;
+      const modY = potionCount > 0
+        ? potionY + 12 + effects.length * effectLineHeight + dashOffset
+        : potionY + effects.length * effectLineHeight + dashOffset;
+      const modText = this.add.text(panelX, modY,
+        `${floorMod.icon} ${floorMod.name}`, {
+          fontSize: '8px', fill: floorMod.color, fontFamily: 'monospace',
+          fontStyle: 'bold', stroke: '#000000', strokeThickness: 1,
+        });
+      this.uiContainer.add(modText);
     }
 
     // ---- Bottom: Controls hint ----

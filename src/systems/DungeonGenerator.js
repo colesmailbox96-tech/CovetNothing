@@ -46,16 +46,17 @@ export class DungeonGenerator {
       doorPositions[door.direction] = { tileX: pos.x, tileY: pos.y, edgeId: door.edgeId, targetRoom: door.targetRoom };
     }
 
-    // --- Optional obstacles (small wall pillars inside the room) ---
+    // --- Optional obstacles (structured pillar formations inside the room) ---
     const obstacles = [];
     if (roomNode.type === 'normal' || roomNode.type === 'elite' || roomNode.type === 'boss') {
-      const count = Phaser.Math.Between(0, 3);
-      for (let i = 0; i < count; i++) {
-        const ox = Phaser.Math.Between(3, w - 4);
-        const oy = Phaser.Math.Between(3, h - 4);
-        if (map[oy][ox] === 0) {
-          map[oy][ox] = 1; // wall obstacle
-          obstacles.push({ x: ox, y: oy });
+      const patterns = DungeonGenerator._pillarPatterns(w, h);
+      if (patterns.length > 0) {
+        const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+        for (const pos of pattern) {
+          if (pos.x >= 2 && pos.x < w - 2 && pos.y >= 2 && pos.y < h - 2 && map[pos.y][pos.x] === 0) {
+            map[pos.y][pos.x] = 1; // wall obstacle
+            obstacles.push({ x: pos.x, y: pos.y });
+          }
         }
       }
     }
@@ -151,6 +152,32 @@ export class DungeonGenerator {
       }
     }
 
+    // --- Breakable pot placement (most room types) ---
+    const potPositions = [];
+    if (roomNode.type !== 'rest') {
+      const potCount = Phaser.Math.Between(
+        GAME_CONFIG.POT_COUNT_MIN, GAME_CONFIG.POT_COUNT_MAX
+      );
+      for (let i = 0; i < potCount; i++) {
+        let px, py, attempts = 0;
+        do {
+          px = Phaser.Math.Between(2, w - 3);
+          py = Phaser.Math.Between(2, h - 3);
+          attempts++;
+        } while (
+          (map[py][px] !== 0 ||
+           (px === spawnPos.x && py === spawnPos.y) ||
+           potPositions.some(p => p.x === px && p.y === py) ||
+           trapPositions.some(tp => tp.x === px && tp.y === py) ||
+           decorations.some(d => d.x === px && d.y === py)) &&
+          attempts < 20
+        );
+        if (map[py][px] === 0) {
+          potPositions.push({ x: px, y: py });
+        }
+      }
+    }
+
     return {
       map,
       width: w,
@@ -162,6 +189,7 @@ export class DungeonGenerator {
       obstacles,
       trapPositions,
       decorations,
+      potPositions,
     };
   }
 
@@ -185,5 +213,48 @@ export class DungeonGenerator {
       case 'west':  return { x: pos.x + 1, y: pos.y };
       default:      return null;
     }
+  }
+
+  /** Generate structured pillar formation patterns for tactical combat */
+  static _pillarPatterns(w, h) {
+    const cx = Math.floor(w / 2);
+    const cy = Math.floor(h / 2);
+    const patterns = [];
+
+    // Pattern: Four corner pillars (creates open center with cover spots)
+    patterns.push([
+      { x: cx - 4, y: cy - 3 }, { x: cx + 4, y: cy - 3 },
+      { x: cx - 4, y: cy + 3 }, { x: cx + 4, y: cy + 3 },
+    ]);
+
+    // Pattern: Cross formation (central obstacle ring)
+    patterns.push([
+      { x: cx, y: cy - 3 }, { x: cx, y: cy + 3 },
+      { x: cx - 4, y: cy }, { x: cx + 4, y: cy },
+    ]);
+
+    // Pattern: L-shape barriers (asymmetric cover)
+    patterns.push([
+      { x: cx - 3, y: cy - 2 }, { x: cx - 3, y: cy - 1 }, { x: cx - 2, y: cy - 2 },
+      { x: cx + 3, y: cy + 2 }, { x: cx + 3, y: cy + 1 }, { x: cx + 2, y: cy + 2 },
+    ]);
+
+    // Pattern: Central column with flanking pillars
+    patterns.push([
+      { x: cx, y: cy },
+      { x: cx - 5, y: cy - 2 }, { x: cx + 5, y: cy - 2 },
+      { x: cx - 5, y: cy + 2 }, { x: cx + 5, y: cy + 2 },
+    ]);
+
+    // Pattern: Corridor walls (forces movement along lanes)
+    patterns.push([
+      { x: cx - 2, y: cy - 3 }, { x: cx - 2, y: cy - 2 }, { x: cx - 2, y: cy - 1 },
+      { x: cx + 2, y: cy + 1 }, { x: cx + 2, y: cy + 2 }, { x: cx + 2, y: cy + 3 },
+    ]);
+
+    // Pattern: Empty room (no obstacles, ~25% chance)
+    patterns.push([]);
+
+    return patterns;
   }
 }

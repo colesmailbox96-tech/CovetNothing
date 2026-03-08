@@ -56,7 +56,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.invulnerable) return;
 
     const defense = this.levelSystem.getDefense ? this.levelSystem.getDefense() : 0;
-    const mitigated = Math.max(1, amount - defense);
+    // Apply floor modifier defense bonus and damage taken multiplier
+    const modDef = (this.floorModifier && this.floorModifier.effects.bonusDefense) || 0;
+    const dmgTakenMult = (this.floorModifier && this.floorModifier.effects.damageTakenMultiplier) || 1;
+    const mitigated = Math.max(1, Math.floor(amount * dmgTakenMult) - defense - modDef);
     this.hp -= mitigated;
     this.invulnerable = true;
     this.invulnerableTimer = 500;
