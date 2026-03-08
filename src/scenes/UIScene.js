@@ -268,6 +268,11 @@ export class UIScene extends Phaser.Scene {
     this.createTouchButton(rightX - btnRadius * 2 - pad, bottomY - btnRadius * 2 - pad, btnRadius * 0.8, '🧪', 0x44ff88, () => {
       this.emitTouchAction('potion');
     });
+
+    // Dash button (above potion)
+    this.createTouchButton(rightX, bottomY - (btnRadius * 2 + pad) * 2, btnRadius * 0.8, '💨', 0x88ccff, () => {
+      this.emitTouchAction('dash');
+    });
   }
 
   createTouchButton(x, y, radius, label, color, callback) {
@@ -329,6 +334,11 @@ export class UIScene extends Phaser.Scene {
       if (dungeonScene && dungeonScene.scene.isActive() && dungeonScene._usePotion) {
         dungeonScene._usePotion();
       }
+    } else if (action === 'dash') {
+      const player = this.getActivePlayer();
+      if (player && player.active && player.tryDash) {
+        player.tryDash();
+      }
     }
   }
 
@@ -383,10 +393,11 @@ export class UIScene extends Phaser.Scene {
     const panelX = width - barWidth - pad * 2 - safeRight;
     const panelY = safeTop;
 
-    // Background panel - expand if active effects are showing
+    // Background panel - expand if active effects or dash indicator showing
     const effectLineHeight = 11;
     const effectCount = (this.stats.activeEffects || []).length;
-    const panelHeight = 125 + effectCount * effectLineHeight;
+    const hasDashIndicator = this.stats.location === 'dungeon' ? 1 : 0;
+    const panelHeight = 125 + (effectCount + hasDashIndicator) * effectLineHeight;
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
       barWidth + pad * 3, panelHeight,
@@ -484,11 +495,33 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
+    // Dash cooldown indicator
+    if (this.stats.location === 'dungeon') {
+      const player = this.getActivePlayer();
+      const dashReady = !player || (player.dashCooldown <= 0 && !player.isDashing);
+      const dashY = potionCount > 0 ? potionY + 12 + effects.length * effectLineHeight : potionY + effects.length * effectLineHeight;
+      const dashColor = dashReady ? '#88ccff' : '#666666';
+      let dashLabel;
+      if (dashReady) {
+        dashLabel = '💨 Dash Ready (Shift)';
+      } else if (player) {
+        const remaining = Math.max(0, player.dashCooldown / 1000).toFixed(1);
+        dashLabel = `💨 Dash (${remaining}s)`;
+      } else {
+        dashLabel = '💨 Dash...';
+      }
+      const dashText = this.add.text(panelX, dashY, dashLabel, {
+        fontSize: '8px', fill: dashColor, fontFamily: 'monospace',
+        stroke: '#000000', strokeThickness: 1,
+      });
+      this.uiContainer.add(dashText);
+    }
+
     // ---- Bottom: Controls hint ----
     const controlsY = height - Math.max(20, this.safeArea.bottom + 8);
     const controlsText = this.isTouchDevice
       ? ''
-      : 'WASD: Move | SPACE: Attack | E: Interact | Q: Potion | I: Inventory';
+      : 'WASD: Move | SPACE: Attack | SHIFT: Dash | E: Interact | Q: Potion | I: Inventory';
     if (controlsText) {
       this.controlsHint = this.add.text(width / 2, controlsY, controlsText, {
         fontSize: '9px', fill: '#888888', fontFamily: 'monospace',

@@ -35,6 +35,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
     this.attackKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.dashKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+
+    // Dash state
+    this.isDashing = false;
+    this.dashTimer = 0;
+    this.dashCooldown = 0;
+    this.dashDir = { x: 0, y: 0 };
   }
 
   getMaxHP() {
@@ -138,11 +145,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return offsets[this.facing] || { x: 0, y: reach };
   }
 
+  tryDash() {
+    if (this.isDashing || this.dashCooldown > 0) return;
+
+    this.isDashing = true;
+    this.invulnerable = true;
+    this.dashTimer = GAME_CONFIG.DASH_DURATION;
+    this.dashCooldown = GAME_CONFIG.DASH_COOLDOWN;
+
+    // Dash in facing direction
+    const offset = this.getFacingOffset();
+    const len = Math.sqrt(offset.x * offset.x + offset.y * offset.y);
+    if (len > 0) {
+      this.dashDir = { x: offset.x / len, y: offset.y / len };
+    } else {
+      this.dashDir = { x: 0, y: 1 };
+    }
+
+    // Visual feedback: tint and slight transparency
+    this.setTint(0x88ccff);
+    this.setAlpha(0.6);
+
+    // Haptic feedback
+    if (navigator.vibrate) navigator.vibrate(15);
+  }
+
   update(time, delta) {
     if (this.attackCooldown > 0) {
       this.attackCooldown -= delta;
     }
-    if (this.invulnerable) {
+    if (this.dashCooldown > 0) {
+      this.dashCooldown -= delta;
+    }
+    if (this.invulnerable && !this.isDashing) {
       this.invulnerableTimer -= delta;
       if (this.invulnerableTimer <= 0) {
         this.invulnerable = false;
@@ -151,6 +186,40 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     if (this.autoRetaliateTimer > 0) {
       this.autoRetaliateTimer -= delta;
+    }
+
+    // Handle active dash
+    if (this.isDashing) {
+      this.dashTimer -= delta;
+      this.setVelocity(
+        this.dashDir.x * GAME_CONFIG.DASH_SPEED,
+        this.dashDir.y * GAME_CONFIG.DASH_SPEED
+      );
+
+      // Spawn afterimage
+      if (this.scene && this.scene.add) {
+        const ghost = this.scene.add.image(this.x, this.y, this.texture.key);
+        ghost.setScale(this.scaleX, this.scaleY);
+        ghost.setAlpha(0.3);
+        ghost.setTint(0x88ccff);
+        ghost.setDepth(9);
+        this.scene.tweens.add({
+          targets: ghost,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => ghost.destroy(),
+        });
+      }
+
+      if (this.dashTimer <= 0) {
+        this.isDashing = false;
+        this.invulnerable = false;
+        this.invulnerableTimer = 0;
+        this.clearTint();
+        this.setAlpha(1);
+        this.setVelocity(0, 0);
+      }
+      return; // skip normal movement during dash
     }
 
     // Movement
@@ -176,6 +245,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Attack with space (allowed while moving)
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
       this.tryAttack();
+    }
+
+    // Dash with shift
+    if (Phaser.Input.Keyboard.JustDown(this.dashKey)) {
+      this.tryDash();
     }
 
     if (vx !== 0 || vy !== 0) {
