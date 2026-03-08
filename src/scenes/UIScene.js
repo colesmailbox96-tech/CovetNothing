@@ -66,10 +66,32 @@ export class UIScene extends Phaser.Scene {
       Object.assign(this.stats, data);
       const now = Date.now();
       const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
-      if (statsJSON !== this._lastHUDStatsJSON || now - this._lastHUDUpdateTime > UI_UPDATE_INTERVAL) {
-        this._lastHUDStatsJSON = statsJSON;
+
+      // If the fingerprint hasn't changed, skip any HUD work entirely.
+      if (statsJSON === this._lastHUDStatsJSON) {
+        return;
+      }
+
+      this._lastHUDStatsJSON = statsJSON;
+
+      const elapsed = now - this._lastHUDUpdateTime;
+
+      // If enough time has passed since the last full HUD rebuild, update immediately.
+      if (elapsed >= UI_UPDATE_INTERVAL) {
         this._lastHUDUpdateTime = now;
         this.refreshHUD();
+        return;
+      }
+
+      // Otherwise, schedule a single delayed HUD refresh if one is not already pending.
+      if (!this._pendingHUDUpdate) {
+        this._pendingHUDUpdate = true;
+        const delay = UI_UPDATE_INTERVAL - elapsed;
+        this.time.delayedCall(delay, () => {
+          this._pendingHUDUpdate = false;
+          this._lastHUDUpdateTime = Date.now();
+          this.refreshHUD();
+        });
       }
     });
 
