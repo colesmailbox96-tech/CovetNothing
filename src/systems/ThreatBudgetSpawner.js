@@ -57,6 +57,21 @@ export class ThreatBudgetSpawner {
     const waves = Array.from({ length: waveCount }, () => []);
     spawns.forEach((s, i) => waves[i % waveCount].push(s));
 
+    // In boss rooms, mark the strongest enemy in wave 1 as a boss variant
+    if (roomType === 'boss' && waves.length > 0 && waves[0].length > 0) {
+      // Find the enemy with the highest threat in the first wave
+      let bossIdx = 0;
+      let maxThreat = 0;
+      for (let i = 0; i < waves[0].length; i++) {
+        const data = ENEMY_DATA[waves[0][i].type];
+        if (data && data.threatValue > maxThreat) {
+          maxThreat = data.threatValue;
+          bossIdx = i;
+        }
+      }
+      waves[0][bossIdx].isBoss = true;
+    }
+
     return { waves };
   }
 }

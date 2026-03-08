@@ -102,6 +102,12 @@ export class BootScene extends Phaser.Scene {
     // Generate procedural textures for Dust Wraith
     this.generateDustWraithTextures();
 
+    // Generate procedural textures for Sand Stalker
+    this.generateSandStalkerTextures();
+
+    // Generate projectile texture
+    this.generateProjectileTexture();
+
     // Generate decoration textures
     this.generateDecorationTextures();
 
@@ -216,6 +222,81 @@ export class BootScene extends Phaser.Scene {
 
       g.generateTexture(`dust-wraith-idle-${dir}-0`, size, size);
     }
+    g.destroy();
+  }
+
+  /** Procedurally generate Sand Stalker textures (desert-themed ranged caster) */
+  generateSandStalkerTextures() {
+    const size = 64;
+    const g = this.add.graphics();
+
+    for (const dir of DIRS) {
+      g.clear();
+
+      // Sandy outer aura
+      g.fillStyle(0xccaa55, 0.12);
+      g.fillCircle(size / 2, size / 2, 26);
+
+      // Body — ochre/sand colored humanoid form
+      g.fillStyle(0xbb8833, 0.8);
+      g.fillEllipse(size / 2, size / 2 + 4, 22, 30);
+
+      // Hooded head
+      g.fillStyle(0x997722, 0.9);
+      g.fillCircle(size / 2, size / 2 - 8, 10);
+
+      // Dark face opening
+      g.fillStyle(0x332211, 0.9);
+      g.fillEllipse(size / 2, size / 2 - 6, 8, 6);
+
+      // Glowing eyes based on direction
+      const eyeOffsets = {
+        'south':      [{ x: -3, y: -7 }, { x: 3, y: -7 }],
+        'north':      [{ x: -3, y: -9 }, { x: 3, y: -9 }],
+        'east':       [{ x: 2, y: -8 }, { x: 2, y: -5 }],
+        'west':       [{ x: -2, y: -8 }, { x: -2, y: -5 }],
+        'south-east': [{ x: 0, y: -7 }, { x: 4, y: -6 }],
+        'south-west': [{ x: -4, y: -6 }, { x: 0, y: -7 }],
+        'north-east': [{ x: 0, y: -9 }, { x: 4, y: -8 }],
+        'north-west': [{ x: -4, y: -8 }, { x: 0, y: -9 }],
+      };
+      const eyes = eyeOffsets[dir] || eyeOffsets['south'];
+      g.fillStyle(0xffcc00, 1);
+      g.fillCircle(size / 2 + eyes[0].x, size / 2 + eyes[0].y, 2);
+      g.fillCircle(size / 2 + eyes[1].x, size / 2 + eyes[1].y, 2);
+
+      // Staff/arm on one side
+      g.fillStyle(0x664422, 0.9);
+      g.fillRect(size / 2 + 8, size / 2 - 4, 3, 20);
+      // Staff orb
+      g.fillStyle(0xffaa00, 0.7);
+      g.fillCircle(size / 2 + 9, size / 2 - 6, 4);
+
+      // Tattered robe edges
+      g.fillStyle(0x886633, 0.4);
+      g.fillTriangle(
+        size / 2 - 8, size / 2 + 16,
+        size / 2 + 8, size / 2 + 16,
+        size / 2, size / 2 + 28
+      );
+
+      g.generateTexture(`sand-stalker-idle-${dir}-0`, size, size);
+    }
+    g.destroy();
+  }
+
+  /** Generate projectile texture for ranged enemies */
+  generateProjectileTexture() {
+    const g = this.add.graphics();
+    // Sand bolt (10x10)
+    g.fillStyle(0xffcc44, 0.9);
+    g.fillCircle(5, 5, 5);
+    g.fillStyle(0xffee88, 0.7);
+    g.fillCircle(5, 5, 3);
+    g.fillStyle(0xffffff, 0.5);
+    g.fillCircle(5, 5, 1.5);
+    g.generateTexture('projectile-sand', 10, 10);
+    g.clear();
     g.destroy();
   }
 
