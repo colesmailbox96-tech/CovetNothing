@@ -305,14 +305,18 @@ function drawStatue(ctx, p, ts) {
 
 function drawCanopy(ctx, p, ts, color1, color2, alpha) {
   const x = p.x, y = p.y;
-  const cx = x + ts / 2, cy = y + ts / 2;
   ctx.globalAlpha = alpha;
+  // Outer canopy shape (blocky pixel-art silhouette)
   ctx.fillStyle = color1;
-  ctx.beginPath(); ctx.ellipse(cx, cy, 15, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x + 4,  y + 4,  24, 24);
+  ctx.fillRect(x + 2,  y + 6,  28, 20);
+  ctx.fillRect(x + 6,  y + 2,  20, 28);
+  // Inner highlight clusters
   ctx.fillStyle = color2;
-  ctx.beginPath(); ctx.ellipse(cx - 3, cy - 2, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(cx + 4, cy + 3, 8, 7, 0, 0, Math.PI * 2); ctx.fill();
-  // Leaf specks
+  ctx.fillRect(x + 6,  y + 6,  8, 6);
+  ctx.fillRect(x + 18, y + 10, 8, 6);
+  ctx.fillRect(x + 10, y + 18, 10, 6);
+  // Leaf detail specks
   ctx.globalAlpha = alpha * 0.5;
   ctx.fillStyle = color2;
   ctx.fillRect(x + 4, y + 6, 3, 2); ctx.fillRect(x + 22, y + 14, 3, 2);
