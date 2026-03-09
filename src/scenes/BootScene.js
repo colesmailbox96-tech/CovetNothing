@@ -155,6 +155,11 @@ export class BootScene extends Phaser.Scene {
       this.generateLightPoolTexture();
     }
 
+    // Phase 5 – particle textures for decorative emitters
+    if (visualFlags.enableParticles) {
+      this.generateParticleTextures();
+    }
+
     // Generate item icons for materials without sprite assets
     this.generateItemIcons();
 
@@ -759,5 +764,45 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(0, 0, size, size);
 
     this.textures.addCanvas('light-pool', canvas);
+  }
+
+  /* ---- Phase 5: particle textures for decorative emitters ---- */
+
+  generateParticleTextures() {
+    // Small white square (4×4) – tinted at runtime for falling leaves
+    {
+      const c = document.createElement('canvas');
+      c.width = 4; c.height = 4;
+      const x = c.getContext('2d');
+      x.fillStyle = '#ffffff';
+      x.fillRect(0, 0, 4, 4);
+      this.textures.addCanvas('particle-square', c);
+    }
+
+    // Small white circle (4×4) – pollen / firefly dots
+    {
+      const c = document.createElement('canvas');
+      c.width = 4; c.height = 4;
+      const x = c.getContext('2d');
+      x.fillStyle = '#ffffff';
+      x.beginPath();
+      x.arc(2, 2, 2, 0, Math.PI * 2);
+      x.fill();
+      this.textures.addCanvas('particle-dot', c);
+    }
+
+    // Soft glow (6×6) – radial gradient for torch flame flicker
+    {
+      const c = document.createElement('canvas');
+      c.width = 6; c.height = 6;
+      const x = c.getContext('2d');
+      const g = x.createRadialGradient(3, 3, 0, 3, 3, 3);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.4, '#ffcc44');
+      g.addColorStop(1, 'rgba(255,100,0,0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 6, 6);
+      this.textures.addCanvas('particle-flame', c);
+    }
   }
 }
