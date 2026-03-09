@@ -577,10 +577,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // Phase 4 – room light pools (vignette persists across rooms)
     if (this.lightManager) {
-      for (const img of this.lightManager.lights) {
-        if (img && img.active) img.destroy();
-      }
-      this.lightManager.lights = [];
+      this.lightManager.clearLights();
     }
 
     // Wall visuals stored separately

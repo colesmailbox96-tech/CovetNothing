@@ -53,7 +53,7 @@ export class LightManager {
    * @param {object} [opts]
    * @param {number} [opts.radius=2.5]  – scale multiplier (1 = 64 px)
    * @param {number} [opts.tint=0xffdcaa] – tint colour
-   * @param {number} [opts.alpha=0.45]  – base alpha (kept low to avoid blow-out)
+   * @param {number} [opts.alpha=0.40]  – base alpha (kept low to avoid blow-out)
    * @returns {Phaser.GameObjects.Image|null}
    */
   addLight(x, y, opts = {}) {
@@ -61,7 +61,7 @@ export class LightManager {
 
     const radius = opts.radius ?? 2.5;
     const tint   = opts.tint   ?? 0xffdcaa;
-    const alpha  = opts.alpha  ?? 0.45;
+    const alpha  = opts.alpha  ?? 0.40;
 
     const img = this.scene.add.image(x, y, 'light-pool');
     img.setBlendMode(Phaser.BlendModes.ADD);
@@ -147,12 +147,20 @@ export class LightManager {
   /*  Cleanup                                                            */
   /* ------------------------------------------------------------------ */
 
-  /** Destroy all managed light sprites and the vignette. */
-  destroy() {
+  /** Destroy all light-pool sprites (but keep the vignette). */
+  clearLights() {
     for (const img of this.lights) {
-      if (img && img.active) img.destroy();
+      if (img && img.active) {
+        this.scene.tweens.killTweensOf(img);
+        img.destroy();
+      }
     }
     this.lights = [];
+  }
+
+  /** Destroy all managed light sprites and the vignette. */
+  destroy() {
+    this.clearLights();
 
     if (this.vignette) {
       this.vignette.destroy();

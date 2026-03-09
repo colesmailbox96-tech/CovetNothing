@@ -221,7 +221,7 @@ compositing.
 // Inside any world scene that has a LightManager
 this.lightManager.addLight(worldX, worldY, {
   radius: 2.5,      // scale multiplier (1 = 64 px)
-  alpha: 0.4,        // base alpha (clamped low to stay subtle)
+  alpha: 0.4,       // base alpha (clamped low to stay subtle)
   tint: 0xffdcaa,    // hex colour
 });
 ```
