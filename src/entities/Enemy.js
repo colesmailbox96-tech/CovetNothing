@@ -47,7 +47,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const bodyOffset = (data.spriteSize - bodySize) / 2;
     this.body.setSize(bodySize, bodySize);
     // Compensate body offset for origin shift (0.5→1.0 on Y)
-    this.body.setOffset(bodyOffset, bodyOffset + 10 + this.frame.height * 0.5);
+    const frameH = this.frame ? this.frame.height : data.spriteSize;
+    this.body.setOffset(bodyOffset, bodyOffset + 10 + frameH * 0.5);
     this.setDepth(8);
 
     // Contact shadow

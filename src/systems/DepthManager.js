@@ -26,7 +26,9 @@ export function updateEntityDepth(entity) {
 
 /** Convenience: update an array / Phaser Group of entities. */
 export function updateAllDepths(entities) {
+  if (!entities) return;
   const list = entities.getChildren ? entities.getChildren() : entities;
+  if (!Array.isArray(list)) return;
   for (const e of list) {
     updateEntityDepth(e);
   }

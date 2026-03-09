@@ -28,7 +28,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setOrigin(0.5, 1.0);
     this.body.setSize(40, 40);
     // Compensate body offset for origin shift (0.5→1.0 on Y)
-    this.body.setOffset(32, 48 + this.frame.height * 0.5);
+    const frameH = this.frame ? this.frame.height : 0;
+    this.body.setOffset(32, 48 + frameH * 0.5);
     this.setDepth(10);
 
     // Contact shadow
