@@ -15,7 +15,7 @@ import { SeededRNG } from '../utils/SeededRNG.js';
 import { LightManager } from '../systems/LightManager.js';
 import { visualFlags } from '../config/visualFlags.ts';
 import { TownParticleManager } from '../systems/TownParticleManager.js';
-import { T, MAP_W, MAP_H, TS } from '../data/townMapData.js';
+import { T, MAP_W, MAP_H, TS, TILESET_COLS } from '../data/townMapData.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -83,7 +83,8 @@ export class TownScene extends Phaser.Scene {
     this.cameras.main.setZoom(getAdaptiveZoom(this.scale.width));
 
     // Collisions with tilemap layers
-    this.physics.add.collider(this.player, this.structuresLayer);
+    this.physics.add.collider(this.player, this.wallsLayer);
+    this.physics.add.collider(this.player, this.tallPropsGroup);
     this.physics.add.collider(this.player, this.waterLayer);
 
     // NPC interactions
@@ -148,12 +149,37 @@ export class TownScene extends Phaser.Scene {
     // Collide with all non-empty water/stone tiles
     this.waterLayer.setCollisionByExclusion([-1, 0]);
 
-    // ---- Structures layer (depth 200 – props band) ----
-    this.structuresLayer = map.createLayer('structures', tileset, 0, 0);
-    this.structuresLayer.setDepth(200);
-    // Collision on all structure tiles EXCEPT bridge planks (walkable)
+    // ---- Walls layer (depth 200 – flat structures the player never walks behind) ----
+    this.wallsLayer = map.createLayer('structures', tileset, 0, 0);
+    this.wallsLayer.setDepth(200);
+
+    // ---- Extract tall props into y-sorted sprites for proper occlusion ----
+    const TALL_PROP_IDS = new Set([T.TRUNK, T.LANTERN, T.STATUE]);
+    this._createTallPropTextures(TALL_PROP_IDS);
+    this.tallPropsGroup = this.physics.add.staticGroup();
+
+    this.wallsLayer.forEachTile(tile => {
+      if (tile.index <= 0) return;
+      const tileId = tile.index - 1; // GID → 0-based tile index
+      if (!TALL_PROP_IDS.has(tileId)) return;
+
+      // Create a y-sorted sprite at the tile centre
+      const px = tile.pixelX;
+      const py = tile.pixelY;
+      const sprite = this.tallPropsGroup.create(
+        px + TS / 2, py + TS / 2, `town-tile-${tileId}`
+      );
+      // Depth = ENTITY_BASE + bottom-of-tile so the player sorts correctly
+      sprite.setDepth(ENTITY_BASE + py + TS);
+      sprite.refreshBody();
+
+      // Remove the tile from the flat walls layer (collision now on the sprite)
+      this.wallsLayer.removeTileAt(tile.x, tile.y);
+    });
+
+    // Collision on remaining wall tiles (exclude empty + walkable bridge planks)
     const walkableTiles = [T.BRIDGE + 1]; // GIDs (bridge planks only)
-    this.structuresLayer.setCollisionByExclusion([-1, 0, ...walkableTiles]);
+    this.wallsLayer.setCollisionByExclusion([-1, 0, ...walkableTiles]);
 
     // ---- Canopy layer (renders ABOVE the player for walk-behind) ----
     this.canopyLayer = map.createLayer('canopy', tileset, 0, 0);
@@ -165,6 +191,22 @@ export class TownScene extends Phaser.Scene {
     this.canopyLayer.setScrollFactor(1.02, 1.02);
 
     this.townMap = map;
+  }
+
+  /** Create individual 32×32 textures for each tall-prop tile type from the tileset atlas. */
+  _createTallPropTextures(tileIds) {
+    const src = this.textures.get('town-tileset').getSourceImage();
+    for (const id of tileIds) {
+      const key = `town-tile-${id}`;
+      if (this.textures.exists(key)) continue;
+      const sx = (id % TILESET_COLS) * TS;
+      const sy = Math.floor(id / TILESET_COLS) * TS;
+      const c = document.createElement('canvas');
+      c.width = TS;
+      c.height = TS;
+      c.getContext('2d').drawImage(src, sx, sy, TS, TS, 0, 0, TS, TS);
+      this.textures.addCanvas(key, c);
+    }
   }
 
   /* ================================================================ */
