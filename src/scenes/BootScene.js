@@ -155,6 +155,11 @@ export class BootScene extends Phaser.Scene {
       this.generateLightPoolTexture();
     }
 
+    // Phase 7 – light-mask texture for dark-overlay cutouts
+    if (visualFlags.enableDarkOverlay) {
+      this.generateLightMaskTexture();
+    }
+
     // Phase 5 – particle textures for decorative emitters
     if (visualFlags.enableParticles) {
       this.generateParticleTextures();
@@ -764,6 +769,33 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(0, 0, size, size);
 
     this.textures.addCanvas('light-pool', canvas);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Phase 7 – Light-mask texture for dark-overlay cutouts              */
+  /* ------------------------------------------------------------------ */
+  generateLightMaskTexture() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = size / 2;
+
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+    grad.addColorStop(0.3, 'rgba(255, 255, 255, 0.9)');
+    grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');
+    grad.addColorStop(0.85, 'rgba(255, 255, 255, 0.1)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    this.textures.addCanvas('light-mask', canvas);
   }
 
   /* ---- Phase 5: particle textures for decorative emitters ---- */
