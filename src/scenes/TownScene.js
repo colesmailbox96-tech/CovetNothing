@@ -13,6 +13,7 @@ import { LayerManager, ENTITY_BASE, FOREGROUND_DEPTH } from '../systems/LayerMan
 import { Decorator } from '../systems/Decorator.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { LightManager } from '../systems/LightManager.js';
+import { TownParticleManager } from '../systems/TownParticleManager.js';
 import { T, MAP_W, MAP_H, TS } from '../data/townMapData.js';
 
 export class TownScene extends Phaser.Scene {
@@ -102,6 +103,9 @@ export class TownScene extends Phaser.Scene {
     this._createTownLights(ts);
     this.lightManager.createVignette({ alpha: 0.25 });
 
+    // Phase 5 – decorative particle emitters
+    this._createTownParticles(ts);
+
     // Update UI
     this.updateUI();
 
@@ -146,6 +150,8 @@ export class TownScene extends Phaser.Scene {
     // but below FOREGROUND_DEPTH (10 000) used for UI labels / popups.
     const CANOPY_DEPTH = FOREGROUND_DEPTH - 100;
     this.canopyLayer.setDepth(CANOPY_DEPTH);
+    // Parallax-subtle: canopy scrolls slightly faster (closer to camera)
+    this.canopyLayer.setScrollFactor(1.02, 1.02);
 
     this.townMap = map;
   }
@@ -194,6 +200,34 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
+  /** Phase 5 – Decorative particle emitters: leaves, pollen, torch flames. */
+  _createTownParticles(ts) {
+    this.particleManager = new TownParticleManager(this);
+
+    // 1. Falling leaves (map-wide, slow drift with random wind)
+    this.particleManager.createFallingLeaves(MAP_W * ts, MAP_H * ts);
+
+    // 2. Floating pollen / fireflies near water (pond + river edges)
+    const pollenPositions = [
+      { x: 12 * ts, y: 10 * ts },   // pond NW
+      { x: 17 * ts, y: 10 * ts },   // pond NE
+      { x: 14 * ts + ts / 2, y: 14 * ts },   // pond S
+      { x: 6 * ts,  y: 20 * ts + ts / 2 },   // river W
+      { x: 22 * ts, y: 20 * ts + ts / 2 },   // river E
+    ];
+    this.particleManager.createWaterPollen(pollenPositions);
+
+    // 3. Torch flame flicker on lantern posts
+    const lanternPositions = [
+      { x: 12, y: 7 }, { x: 17, y: 7 },
+      { x: 14, y: 4 }, { x: 15, y: 4 },
+      { x: 14, y: 18 }, { x: 15, y: 18 },
+    ];
+    this.particleManager.createTorchFlames(
+      lanternPositions.map(l => ({ x: l.x * ts + ts / 2, y: l.y * ts + 6 }))
+    );
+  }
+
   createNPCMarker(x, y, label, color, callback) {
     const circle = this.add.circle(x, y, 10, color, 0.8);
     this.layerManager.addToLayer('entityLayer', circle);
@@ -237,6 +271,10 @@ export class TownScene extends Phaser.Scene {
 
     if (!this.npcZones) this.npcZones = [];
     this.npcZones.push(zone);
+
+    // Track NPC circles for per-frame y-sort depth updates
+    if (!this.npcCircles) this.npcCircles = [];
+    this.npcCircles.push(circle);
   }
 
   createDungeonEntrance(ts) {
@@ -407,6 +445,12 @@ export class TownScene extends Phaser.Scene {
 
     // ── Visual polish: Y-sort + shadow + pixel-perfect camera ──
     updateEntityDepth(this.player);
+    // Y-sort NPC markers so bouncing circles stay at correct depth
+    if (this.npcCircles) {
+      for (const c of this.npcCircles) {
+        if (c.active) c.setDepth(ENTITY_BASE + c.y);
+      }
+    }
     snapCameraScroll(this.cameras.main);
   }
 

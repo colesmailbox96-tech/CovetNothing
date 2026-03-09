@@ -16,4 +16,6 @@ export const visualFlags = {
   enableLighting: true,
   /** Phase 4 – subtle vignette overlay on world scenes (optional) */
   enableVignette: true,
+  /** Phase 5 – decorative particle emitters (leaves, pollen, flames) */
+  enableParticles: true,
 };
