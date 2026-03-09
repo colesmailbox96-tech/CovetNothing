@@ -10,6 +10,8 @@ import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
 import { updateEntityDepth, snapCameraScroll } from '../systems/DepthManager.js';
 import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
+import { Decorator } from '../systems/Decorator.js';
+import { SeededRNG } from '../utils/SeededRNG.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -167,6 +169,9 @@ export class TownScene extends Phaser.Scene {
   createTownLayout(w, h, ts) {
     this.wallLayer = this.physics.add.staticGroup();
 
+    // Seeded RNG for tile-variant selection (deterministic town look)
+    const variantRng = new SeededRNG(SeededRNG.townSeed() + 7);
+
     // Town map layout:
     // 0 = grass, 1 = wall, 2 = path, 3 = dungeon entrance
     const layout = [];
@@ -214,12 +219,14 @@ export class TownScene extends Phaser.Scene {
         const tile = layout[y][x];
 
         if (tile === 0) {
-          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-grass'));
+          const texKey = Decorator.townGrassVariant(variantRng);
+          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, texKey));
         } else if (tile === 1) {
           // Shop building tiles get grass underneath; the storefront sprite covers them
           const isShopTile = x >= 2 && x <= 5 && y >= 2 && y <= 4;
           if (isShopTile) {
-            this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-grass'));
+            const texKey = Decorator.townGrassVariant(variantRng);
+            this.layerManager.addToLayer('groundLayer', this.add.image(px, py, texKey));
           } else {
             this.layerManager.addToLayer('propsLowLayer', this.add.image(px, py, 'town-wall'));
           }
@@ -235,6 +242,11 @@ export class TownScene extends Phaser.Scene {
         }
       }
     }
+
+    // Phase 3 – deterministic decal dressing for town grass tiles
+    this._townDecalImages = Decorator.decorateTown(
+      this, layout, w, h, this.layerManager, ts, SeededRNG.townSeed(),
+    );
 
     // Place storefront sprite on the Shop building (tiles x:2-5, y:2-4)
     const shopCenterX = (2 + 5) / 2 * ts + ts / 2;
