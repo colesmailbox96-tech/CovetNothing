@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/enemies.js';
 import { GAME_CONFIG, getDirection } from '../config.js';
+import { visualFlags } from '../config/visualFlags.ts';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, enemyType, opts = {}) {
@@ -39,11 +40,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Physics setup
     const spriteScale = this.isBoss ? GAME_CONFIG.BOSS_SPRITE_SCALE : 0.45;
     this.setScale(spriteScale);
+
+    // Anchor at bottom-center so sprite.y == feetY
+    this.setOrigin(0.5, 1.0);
     const bodySize = data.spriteSize * 0.35;
     const bodyOffset = (data.spriteSize - bodySize) / 2;
     this.body.setSize(bodySize, bodySize);
-    this.body.setOffset(bodyOffset, bodyOffset + 10);
+    // Compensate body offset for origin shift (0.5→1.0 on Y)
+    const frameH = this.frame ? this.frame.height : data.spriteSize;
+    this.body.setOffset(bodyOffset, bodyOffset + 10 + frameH * 0.5);
     this.setDepth(8);
+
+    // Contact shadow
+    if (visualFlags.enableShadows && scene.textures.exists('entity-shadow')) {
+      this._shadow = scene.add.image(x, y, 'entity-shadow').setOrigin(0.5, 0.5);
+      this._shadow.setDepth(this.depth - 0.5);
+    }
 
     // Boss glow
     if (this.isBoss) {
@@ -51,7 +63,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       scene.time.delayedCall(200, () => {
         if (this.active) this.clearTint();
       });
-      this._bossGlow = scene.add.circle(x, y, data.spriteSize * 0.3, 0xff2222, 0.15).setDepth(7);
+      this._bossGlow = scene.add.circle(x, y - this.displayHeight / 2, data.spriteSize * 0.3, 0xff2222, 0.15).setDepth(7);
       scene.tweens.add({
         targets: this._bossGlow,
         alpha: { from: 0.08, to: 0.2 },
@@ -79,7 +91,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hpBar.setDepth(15);
     if (this.isBoss) {
       const name = `BOSS ${this.data_.name}`;
-      this._bossLabel = this.scene.add.text(this.x, this.y - this.displayHeight / 2 - 16, name, {
+      this._bossLabel = this.scene.add.text(this.x, this.y - this.displayHeight - 16, name, {
         fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 2,
       }).setOrigin(0.5).setDepth(15);
@@ -94,7 +106,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const barWidth = this.isBoss ? 44 : 30;
     const barHeight = this.isBoss ? 5 : 4;
     const x = this.x - barWidth / 2;
-    const y = this.y - this.displayHeight / 2 - 8;
+    const y = this.y - this.displayHeight - 8;
 
     // Background
     this.hpBar.fillStyle(0x333333, 0.8);
@@ -110,9 +122,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this._bossLabel && this._bossLabel.active) {
       this._bossLabel.setPosition(this.x, y - 8);
     }
-    // Update boss glow position
+    // Update boss glow position (center of sprite)
     if (this._bossGlow && this._bossGlow.active) {
-      this._bossGlow.setPosition(this.x, this.y);
+      this._bossGlow.setPosition(this.x, this.y - this.displayHeight / 2);
     }
   }
 
@@ -168,7 +180,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   showDamageNumber(amount) {
-    const dmgText = this.scene.add.text(this.x, this.y - 20, `-${amount}`, {
+    const dmgText = this.scene.add.text(this.x, this.y - this.displayHeight - 4, `-${amount}`, {
       fontSize: '14px',
       fill: '#ff4444',
       fontFamily: 'monospace',
@@ -203,6 +215,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       targets: this,
       alpha: 0,
       duration: 400,
+      onUpdate: () => {
+        // Fade shadow alongside sprite
+        if (this._shadow) this._shadow.setAlpha(this.alpha);
+      },
       onComplete: () => {
         if (this.hpBar) this.hpBar.destroy();
         this.destroy();
@@ -565,6 +581,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene) {
+    if (this._shadow) {
+      this._shadow.destroy();
+      this._shadow = null;
+    }
     if (this.hpBar) {
       this.hpBar.destroy();
       this.hpBar = null;

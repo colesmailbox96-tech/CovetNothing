@@ -8,6 +8,7 @@ import { EquipmentSystem } from '../systems/EquipmentSystem.js';
 import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
+import { updateEntityDepth, snapCameraScroll } from '../systems/DepthManager.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -456,6 +457,10 @@ export class TownScene extends Phaser.Scene {
         }
       }
     }
+
+    // ── Visual polish: Y-sort + shadow + pixel-perfect camera ──
+    updateEntityDepth(this.player);
+    snapCameraScroll(this.cameras.main);
   }
 
   /** Return a touch-aware interaction prompt */
