@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { visualFlags } from '../config/visualFlags.ts';
 
 const DIRS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];
 
@@ -105,6 +106,16 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // ── Visual-polish flags ──
+    if (visualFlags.enablePixelPerfect) {
+      this.game.renderer.config.antialias = false;
+    }
+
+    // Generate contact-shadow ellipse texture (no external art)
+    if (visualFlags.enableShadows) {
+      this.generateShadowTexture();
+    }
+
     // Generate procedural textures for Dust Wraith
     this.generateDustWraithTextures();
 
@@ -502,6 +513,17 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('item-copper-fragment', 16, 16);
     g.clear();
 
+    g.destroy();
+  }
+
+  /** Generate a simple ellipse contact-shadow texture used under entities */
+  generateShadowTexture() {
+    const w = 24;
+    const h = 10;
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.35);
+    g.fillEllipse(w / 2, h / 2, w, h);
+    g.generateTexture('entity-shadow', w, h);
     g.destroy();
   }
 }

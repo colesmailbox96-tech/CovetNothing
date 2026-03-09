@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG, getDirection } from '../config.js';
+import { visualFlags } from '../config/visualFlags.ts';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, levelSystem) {
@@ -22,9 +23,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Set up physics body
     this.setScale(0.5);
+
+    // Anchor at bottom-center so sprite.y == feetY
+    this.setOrigin(0.5, 1.0);
     this.body.setSize(40, 40);
-    this.body.setOffset(32, 48);
+    // Compensate body offset for origin shift (0.5→1.0 on Y)
+    this.body.setOffset(32, 48 + this.frame.height * 0.5);
     this.setDepth(10);
+
+    // Contact shadow
+    if (visualFlags.enableShadows && scene.textures.exists('entity-shadow')) {
+      this._shadow = scene.add.image(x, y, 'entity-shadow').setOrigin(0.5, 0.5);
+      this._shadow.setDepth(this.depth - 0.5);
+    }
 
     // Input
     this.cursors = scene.input.keyboard.createCursorKeys();

@@ -15,6 +15,7 @@ import { RunStats } from '../systems/RunStats.js';
 import { AbilitySystem, ABILITIES } from '../systems/AbilitySystem.js';
 import { getRandomDescription } from '../data/roomDescriptions.js';
 import { pickFloorModifier } from '../data/floorModifiers.js';
+import { updateEntityDepth, updateAllDepths, snapCameraScroll } from '../systems/DepthManager.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -2098,5 +2099,10 @@ export class DungeonScene extends Phaser.Scene {
         enemy.update(time, delta, this.player);
       }
     }
+
+    // ── Visual polish: Y-sort + shadows + pixel-perfect camera ──
+    updateEntityDepth(this.player);
+    updateAllDepths(this.enemies);
+    snapCameraScroll(this.cameras.main);
   }
 }
