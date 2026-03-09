@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { getDirection } from '../config.js';
 import { ITEM_DATA } from '../data/items.js';
 import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
+import { visualFlags } from '../config/visualFlags.ts';
+import { T, MAP_W, MAP_H, TS } from '../data/townMapData.js';
 
 const JOYSTICK_DEAD_ZONE = 0.12;
 const SWIPE_THRESHOLD = 25;     // min px to count as a swipe (lowered for mobile precision)
@@ -512,29 +514,35 @@ export class UIScene extends Phaser.Scene {
     });
     this.uiContainer.add(this.locationText);
 
-    // HP Bar
+    // HP Bar – pixel-art bordered frame
     const hpY = panelY + 18;
-    this.hpBarBg = this.add.rectangle(panelX, hpY, barWidth, barHeight, 0x333333).setOrigin(0, 0);
+    const hpOuter = this.add.rectangle(panelX - 1, hpY - 1, barWidth + 2, barHeight + 2, 0x111111).setOrigin(0, 0);
+    const hpInner = this.add.rectangle(panelX, hpY, barWidth, barHeight, 0x555555).setOrigin(0, 0);
+    this.hpBarBg = this.add.rectangle(panelX + 1, hpY + 1, barWidth - 2, barHeight - 2, 0x222222).setOrigin(0, 0);
     const hpPercent = this.stats.hp / this.stats.maxHp;
-    this.hpBar = this.add.rectangle(panelX, hpY, barWidth * hpPercent, barHeight, 0xff3333).setOrigin(0, 0);
+    this.hpBar = this.add.rectangle(panelX + 1, hpY + 1, (barWidth - 2) * hpPercent, barHeight - 2, 0xff3333).setOrigin(0, 0);
+    const hpHighlight = this.add.rectangle(panelX + 1, hpY + 1, (barWidth - 2) * hpPercent, 2, 0xff7777, 0.6).setOrigin(0, 0);
     this.hpText = this.add.text(panelX + barWidth / 2, hpY + barHeight / 2,
       `HP: ${this.stats.hp}/${this.stats.maxHp}`, {
         fontSize: smallFont, fill: '#ffffff', fontFamily: 'monospace',
         stroke: '#000000', strokeThickness: 1,
       }).setOrigin(0.5);
-    this.uiContainer.add([this.hpBarBg, this.hpBar, this.hpText]);
+    this.uiContainer.add([hpOuter, hpInner, this.hpBarBg, this.hpBar, hpHighlight, this.hpText]);
 
-    // EXP Bar
+    // EXP Bar – pixel-art bordered frame
     const expY = hpY + barHeight + 4;
-    this.expBarBg = this.add.rectangle(panelX, expY, barWidth, barHeight, 0x333333).setOrigin(0, 0);
+    const expOuter = this.add.rectangle(panelX - 1, expY - 1, barWidth + 2, barHeight + 2, 0x111111).setOrigin(0, 0);
+    const expInner = this.add.rectangle(panelX, expY, barWidth, barHeight, 0x555555).setOrigin(0, 0);
+    this.expBarBg = this.add.rectangle(panelX + 1, expY + 1, barWidth - 2, barHeight - 2, 0x222222).setOrigin(0, 0);
     const expPercent = this.stats.exp / this.stats.expNext;
-    this.expBar = this.add.rectangle(panelX, expY, barWidth * expPercent, barHeight, 0x3388ff).setOrigin(0, 0);
+    this.expBar = this.add.rectangle(panelX + 1, expY + 1, (barWidth - 2) * expPercent, barHeight - 2, 0x3388ff).setOrigin(0, 0);
+    const expHighlight = this.add.rectangle(panelX + 1, expY + 1, (barWidth - 2) * expPercent, 2, 0x66aaff, 0.6).setOrigin(0, 0);
     this.expText = this.add.text(panelX + barWidth / 2, expY + barHeight / 2,
       `EXP: ${this.stats.exp}/${this.stats.expNext}`, {
         fontSize: smallFont, fill: '#ffffff', fontFamily: 'monospace',
         stroke: '#000000', strokeThickness: 1,
       }).setOrigin(0.5);
-    this.uiContainer.add([this.expBarBg, this.expBar, this.expText]);
+    this.uiContainer.add([expOuter, expInner, this.expBarBg, this.expBar, expHighlight, this.expText]);
 
     // Level, Gold, Attack text
     const statsY = expY + barHeight + 6;
@@ -668,6 +676,16 @@ export class UIScene extends Phaser.Scene {
 
     // ---- Item Icons Bar (always visible, bottom-left) ----
     this.createItemIconsBar(width, height);
+
+    // ---- Minimap (top-right, below stats panel) ----
+    if (visualFlags.enableMinimap) {
+      this._createMinimap(width, safeTop, safeRight);
+    }
+
+    // ---- Compass Arrow (top-left, points toward dungeon entrance) ----
+    if (visualFlags.enableCompass && this.stats.location === 'town') {
+      this._createCompassArrow(safeTop);
+    }
 
     // ---- Inventory Panel (if open) ----
     if (this.showInventory) {
@@ -1309,6 +1327,215 @@ export class UIScene extends Phaser.Scene {
       this._overlayPanel.destroy();
       this._overlayPanel = null;
     }
+  }
+
+  /* ================================================================ */
+  /*  Minimap                                                          */
+  /* ================================================================ */
+
+  _createMinimap(screenW, safeTop, safeRight) {
+    const pad = 8;
+    const mmScale = 3; // pixels per tile
+
+    if (this.stats.location === 'town') {
+      this._createTownMinimap(screenW, safeTop, safeRight, pad, mmScale);
+    } else if (this.stats.location === 'dungeon') {
+      this._createDungeonMinimap(screenW, safeTop, safeRight, pad, mmScale);
+    }
+  }
+
+  _createTownMinimap(screenW, safeTop, safeRight, pad, mmScale) {
+    const mapW = MAP_W;
+    const mapH = MAP_H;
+    const mmW = mapW * mmScale;
+    const mmH = mapH * mmScale;
+    const mmX = screenW - mmW - pad - safeRight;
+    const mmY = safeTop + 140;
+
+    // Retrieve the generated town map JSON from cache to read tile layers
+    const townMapCache = this.cache.tilemap.get('town-map');
+    if (!townMapCache || !townMapCache.data) return;
+    const mapData = townMapCache.data;
+
+    // Draw minimap onto a canvas texture
+    const texKey = '__minimap_town';
+    if (this.textures.exists(texKey)) this.textures.remove(texKey);
+    const canvas = this.textures.createCanvas(texKey, mmW, mmH);
+    const ctx = canvas.getContext();
+
+    const groundData = mapData.layers.find(l => l.name === 'ground');
+    const waterData = mapData.layers.find(l => l.name === 'water');
+    const structData = mapData.layers.find(l => l.name === 'structures');
+
+    for (let ty = 0; ty < mapH; ty++) {
+      for (let tx = 0; tx < mapW; tx++) {
+        const idx = ty * mapW + tx;
+        const waterGid = waterData ? waterData.data[idx] : 0;
+        const structGid = structData ? structData.data[idx] : 0;
+
+        let color = '#3a6b2a'; // grass (green)
+        if (structGid > 0) {
+          color = '#6b4423'; // structures (brown)
+        } else if (waterGid > 0) {
+          const rawIdx = waterGid - 1; // GID to tile index
+          if (rawIdx === T.WATER_0 || rawIdx === T.WATER_1) {
+            color = '#2a5577'; // water (blue)
+          } else {
+            color = '#777777'; // stone border
+          }
+        } else if (groundData) {
+          const gGid = groundData.data[idx];
+          const gIdx = gGid - 1;
+          if (gIdx === T.PATH) {
+            color = '#8b7355'; // path
+          } else if (gIdx === T.PORTAL) {
+            color = '#aa44ff'; // portal (purple)
+          }
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillRect(tx * mmScale, ty * mmScale, mmScale, mmScale);
+      }
+    }
+
+    // Player dot (white)
+    const townScene = this.scene.get('TownScene');
+    if (townScene && townScene.player && townScene.player.active) {
+      const px = Math.floor(townScene.player.x / TS);
+      const py = Math.floor(townScene.player.y / TS);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px * mmScale, py * mmScale, mmScale, mmScale);
+    }
+
+    canvas.refresh();
+
+    // White border
+    const border = this.add.rectangle(mmX - 1, mmY - 1, mmW + 2, mmH + 2).setOrigin(0, 0);
+    border.setStrokeStyle(1, 0xffffff);
+    this.uiContainer.add(border);
+
+    // Minimap image
+    const mmImage = this.add.image(mmX, mmY, texKey).setOrigin(0, 0);
+    this.uiContainer.add(mmImage);
+  }
+
+  _createDungeonMinimap(screenW, safeTop, safeRight, pad, mmScale) {
+    const dungeonScene = this.scene.get('DungeonScene');
+    if (!dungeonScene || !dungeonScene.scene.isActive() || !dungeonScene.roomData) return;
+
+    const roomData = dungeonScene.roomData;
+    const mapW = roomData.width;
+    const mapH = roomData.height;
+    const mmW = mapW * mmScale;
+    const mmH = mapH * mmScale;
+    const mmX = screenW - mmW - pad - safeRight;
+    const mmY = safeTop + 140;
+
+    const texKey = '__minimap_dungeon';
+    if (this.textures.exists(texKey)) this.textures.remove(texKey);
+    const canvas = this.textures.createCanvas(texKey, mmW, mmH);
+    const ctx = canvas.getContext();
+
+    // Draw tiles
+    for (let ty = 0; ty < mapH; ty++) {
+      for (let tx = 0; tx < mapW; tx++) {
+        const tile = roomData.map[ty][tx];
+        let color;
+        if (tile === 1) {
+          color = '#6b4423'; // wall (brown/structure)
+        } else if (tile === 2) {
+          color = '#aa44ff'; // stairs (purple)
+        } else {
+          color = '#3a6b2a'; // floor (green)
+        }
+        ctx.fillStyle = color;
+        ctx.fillRect(tx * mmScale, ty * mmScale, mmScale, mmScale);
+      }
+    }
+
+    // Enemy dots (red)
+    if (dungeonScene.enemies) {
+      dungeonScene.enemies.getChildren().forEach(enemy => {
+        if (enemy.active) {
+          const ex = Math.floor(enemy.x / dungeonScene.tileSize);
+          const ey = Math.floor(enemy.y / dungeonScene.tileSize);
+          ctx.fillStyle = '#ff3333';
+          ctx.fillRect(ex * mmScale, ey * mmScale, mmScale, mmScale);
+        }
+      });
+    }
+
+    // Player dot (white)
+    if (dungeonScene.player && dungeonScene.player.active) {
+      const px = Math.floor(dungeonScene.player.x / dungeonScene.tileSize);
+      const py = Math.floor(dungeonScene.player.y / dungeonScene.tileSize);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px * mmScale, py * mmScale, mmScale, mmScale);
+    }
+
+    canvas.refresh();
+
+    // White border
+    const border = this.add.rectangle(mmX - 1, mmY - 1, mmW + 2, mmH + 2).setOrigin(0, 0);
+    border.setStrokeStyle(1, 0xffffff);
+    this.uiContainer.add(border);
+
+    // Minimap image
+    const mmImage = this.add.image(mmX, mmY, texKey).setOrigin(0, 0);
+    this.uiContainer.add(mmImage);
+  }
+
+  /* ================================================================ */
+  /*  Compass Arrow                                                    */
+  /* ================================================================ */
+
+  _createCompassArrow(safeTop) {
+    const townScene = this.scene.get('TownScene');
+    if (!townScene || !townScene.scene.isActive() || !townScene.player || !townScene.dungeonEntrance) return;
+
+    const pad = 8;
+    const cx = pad + this.safeArea.left + 20;
+    const cy = safeTop + 20;
+    const arrowSize = 16;
+
+    // Background circle
+    const bg = this.add.circle(cx, cy, arrowSize + 4, 0x000000, 0.6);
+    bg.setStrokeStyle(1, 0xffffff, 0.5);
+    this.uiContainer.add(bg);
+
+    // Calculate angle from player to dungeon entrance
+    const dx = townScene.dungeonEntrance.x - townScene.player.x;
+    const dy = townScene.dungeonEntrance.y - townScene.player.y;
+    const angle = Math.atan2(dy, dx);
+
+    // Draw arrow using a triangle (Phaser graphics)
+    const g = this.add.graphics();
+    g.fillStyle(0xff6644, 1);
+    // Arrow tip
+    const tipX = cx + Math.cos(angle) * arrowSize;
+    const tipY = cy + Math.sin(angle) * arrowSize;
+    // Arrow base (perpendicular)
+    const perpAngle = angle + Math.PI / 2;
+    const baseW = 5;
+    const b1x = cx - Math.cos(angle) * (arrowSize * 0.4) + Math.cos(perpAngle) * baseW;
+    const b1y = cy - Math.sin(angle) * (arrowSize * 0.4) + Math.sin(perpAngle) * baseW;
+    const b2x = cx - Math.cos(angle) * (arrowSize * 0.4) - Math.cos(perpAngle) * baseW;
+    const b2y = cy - Math.sin(angle) * (arrowSize * 0.4) - Math.sin(perpAngle) * baseW;
+
+    g.beginPath();
+    g.moveTo(tipX, tipY);
+    g.lineTo(b1x, b1y);
+    g.lineTo(b2x, b2y);
+    g.closePath();
+    g.fillPath();
+    this.uiContainer.add(g);
+
+    // Label
+    const label = this.add.text(cx, cy + arrowSize + 10, '⛩', {
+      fontSize: '9px', fill: '#ff6644', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 1,
+    }).setOrigin(0.5);
+    this.uiContainer.add(label);
   }
 
   refreshHUD() {
