@@ -1007,7 +1007,7 @@ export class DungeonScene extends Phaser.Scene {
     pot.broken = true;
     pot.sprite.setTexture('deco-pot-broken');
     pot.sprite.setAlpha(0.6);
-    pot.sprite.setDepth(100); // decalLayer depth
+    this.layerManager.addToLayer('decalLayer', pot.sprite);
 
     // Spawn break particles
     for (let i = 0; i < 4; i++) {
