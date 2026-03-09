@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { visualFlags } from '../config/visualFlags.ts';
+import { generateTownTilesetCanvas, generateTownMapJSON } from '../data/townMapData.js';
 
 const DIRS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];
 
@@ -156,6 +157,13 @@ export class BootScene extends Phaser.Scene {
 
     // Generate item icons for materials without sprite assets
     this.generateItemIcons();
+
+    // Town tilemap: procedural tileset atlas + cached JSON map data
+    this.textures.addCanvas('town-tileset', generateTownTilesetCanvas(this));
+    this.cache.tilemap.add('town-map', {
+      format: Phaser.Tilemaps.Formats.TILED_JSON,
+      data: generateTownMapJSON(),
+    });
 
     // Create all animations
     this.createPlayerAnimations();

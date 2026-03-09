@@ -9,10 +9,11 @@ import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
 import { updateEntityDepth, snapCameraScroll } from '../systems/DepthManager.js';
-import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
+import { LayerManager, ENTITY_BASE, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 import { Decorator } from '../systems/Decorator.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { LightManager } from '../systems/LightManager.js';
+import { T, MAP_W, MAP_H, TS } from '../data/townMapData.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -61,24 +62,17 @@ export class TownScene extends Phaser.Scene {
   }
 
   create() {
-    const tileSize = GAME_CONFIG.TILE_SIZE;
+    const ts = GAME_CONFIG.TILE_SIZE;
 
-    // Phase 2 – layered rendering
+    // Phase 2 – layered rendering (still used for entities / UI overlays)
     this.layerManager = new LayerManager(this);
 
-    // Create town map (20x15 tiles)
-    const townW = 20;
-    const townH = 15;
+    // ── Multi-layer Phaser tilemap ──
+    this._createTilemap(ts);
 
-    // Generate tile textures
-    this.createTileTextures(tileSize);
-
-    // Town layout
-    this.createTownLayout(townW, townH, tileSize);
-
-    // Player in center of town
-    const spawnX = 10 * tileSize + tileSize / 2;
-    const spawnY = 10 * tileSize + tileSize / 2;
+    // Player spawn – center of the map on the main path
+    const spawnX = 14 * ts + ts / 2;
+    const spawnY = 9 * ts + ts / 2;
     this.player = new Player(this, spawnX, spawnY, this.levelSystem);
     this.player.hp = this.player.getMaxHP(); // Full heal in town
 
@@ -86,18 +80,26 @@ export class TownScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.setZoom(getAdaptiveZoom(this.scale.width));
 
-    // Walls
-    this.physics.add.collider(this.player, this.wallLayer);
+    // Collisions with tilemap layers
+    this.physics.add.collider(this.player, this.structuresLayer);
+    this.physics.add.collider(this.player, this.waterLayer);
 
     // NPC interactions
-    this.createNPCs(tileSize);
+    this.createNPCs(ts);
 
     // Dungeon entrance
-    this.createDungeonEntrance(tileSize);
+    this.createDungeonEntrance(ts);
+
+    // Place storefront sprite on the Shop building (tiles x:3-6, y:3-5)
+    const shopCenterX = (3 + 6) / 2 * ts + ts / 2;
+    const shopCenterY = (3 + 5) / 2 * ts + ts / 2;
+    this.layerManager.addToLayer('propsSolidLayer',
+      this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
+        .setScale(2));
 
     // Phase 4 – town lighting (warm lamps near buildings / NPCs)
     this.lightManager = new LightManager(this);
-    this._createTownLights(tileSize);
+    this._createTownLights(ts);
     this.lightManager.createVignette({ alpha: 0.25 });
 
     // Update UI
@@ -113,173 +115,62 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
-  createTileTextures(ts) {
-    const g = this.add.graphics();
+  /* ================================================================ */
+  /*  Tilemap setup                                                    */
+  /* ================================================================ */
 
-    // Town grass texture is loaded from tile asset
+  _createTilemap(ts) {
+    const map = this.make.tilemap({ key: 'town-map' });
+    const tileset = map.addTilesetImage('town-tileset');
 
-    // Town path texture is loaded from cobblestone tile asset
+    // ---- Ground layer (depth 0 – below everything) ----
+    this.groundLayer = map.createLayer('ground', tileset, 0, 0);
+    this.groundLayer.setDepth(0);
 
-    // Building wall - wooden planks with grain
-    g.fillStyle(0x6b4423, 1);
-    g.fillRect(0, 0, ts, ts);
-    // Plank horizontal lines
-    g.lineStyle(1, 0x5a3618, 0.7);
-    g.lineBetween(0, 8, ts, 8);
-    g.lineBetween(0, 16, ts, 16);
-    g.lineBetween(0, 24, ts, 24);
-    // Wood grain detail
-    g.fillStyle(0x7b5433, 0.3);
-    g.fillRect(2, 1, 10, 1);
-    g.fillRect(18, 10, 8, 1);
-    g.fillRect(5, 18, 12, 1);
-    g.fillRect(20, 26, 6, 1);
-    // Highlight top edge of planks
-    g.fillStyle(0x8b6243, 0.3);
-    g.fillRect(0, 0, ts, 1);
-    g.fillRect(0, 9, ts, 1);
-    g.fillRect(0, 17, ts, 1);
-    g.fillRect(0, 25, ts, 1);
-    g.lineStyle(1, 0x8b6243, 0.4);
-    g.strokeRect(0, 0, ts, ts);
-    g.generateTexture('town-wall', ts, ts);
-    g.clear();
+    // ---- Water layer (depth 1 – just above ground) ----
+    this.waterLayer = map.createLayer('water', tileset, 0, 0);
+    this.waterLayer.setDepth(1);
+    // Collide with all non-empty water/stone tiles
+    this.waterLayer.setCollisionByExclusion([-1, 0]);
 
-    // Dungeon entrance - dark portal with glow
-    g.fillStyle(0x1a0a2a, 1);
-    g.fillRect(0, 0, ts, ts);
-    g.fillStyle(0x2a1240, 1);
-    g.fillRect(4, 0, ts - 8, ts);
-    // Inner glow layers
-    g.fillStyle(0x3a1a55, 0.6);
-    g.fillRect(8, 4, ts - 16, ts - 8);
-    g.fillStyle(0x4a2a65, 0.4);
-    g.fillRect(10, 8, ts - 20, ts - 16);
-    // Bright center orb
-    g.fillStyle(0xff6600, 0.8);
-    g.fillRect(ts / 2 - 4, ts / 2 - 4, 8, 8);
-    g.fillStyle(0xffaa44, 0.5);
-    g.fillRect(ts / 2 - 2, ts / 2 - 2, 4, 4);
-    // Corner rune marks
-    g.fillStyle(0x8844aa, 0.4);
-    g.fillRect(2, 2, 3, 3);
-    g.fillRect(ts - 5, 2, 3, 3);
-    g.fillRect(2, ts - 5, 3, 3);
-    g.fillRect(ts - 5, ts - 5, 3, 3);
-    g.generateTexture('dungeon-entrance', ts, ts);
-    g.clear();
+    // ---- Structures layer (depth 200 – props band) ----
+    this.structuresLayer = map.createLayer('structures', tileset, 0, 0);
+    this.structuresLayer.setDepth(200);
+    // Collision on all structure tiles EXCEPT bridge planks (walkable)
+    const walkableTiles = [T.BRIDGE + 1, T.LANTERN + 1]; // GIDs
+    this.structuresLayer.setCollisionByExclusion([-1, 0, ...walkableTiles]);
 
-    g.destroy();
+    // ---- Canopy layer (renders ABOVE the player for walk-behind) ----
+    this.canopyLayer = map.createLayer('canopy', tileset, 0, 0);
+    // Depth higher than any entity: ENTITY_BASE + maxY ≈ 300 + 800 = 1100
+    this.canopyLayer.setDepth(FOREGROUND_DEPTH - 100);
+    this.canopyLayer.setAlpha(1); // tile-level alpha is baked in
+
+    this.townMap = map;
   }
 
-  createTownLayout(w, h, ts) {
-    this.wallLayer = this.physics.add.staticGroup();
-
-    // Seeded RNG for tile-variant selection (deterministic town look)
-    const variantRng = new SeededRNG(SeededRNG.townSeed() + 7);
-
-    // Town map layout:
-    // 0 = grass, 1 = wall, 2 = path, 3 = dungeon entrance
-    const layout = [];
-    for (let y = 0; y < h; y++) {
-      layout[y] = [];
-      for (let x = 0; x < w; x++) {
-        // Border walls
-        if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
-          layout[y][x] = 1;
-        }
-        // Main path (horizontal)
-        else if (y >= 6 && y <= 8 && x >= 2 && x <= w - 3) {
-          layout[y][x] = 2;
-        }
-        // Main path (vertical to dungeon)
-        else if (x >= 9 && x <= 11 && y >= 1 && y <= 6) {
-          layout[y][x] = 2;
-        }
-        // Shop building (top-left)
-        else if (x >= 2 && x <= 5 && y >= 2 && y <= 4) {
-          layout[y][x] = 1;
-        }
-        // Blacksmith building (top-right)
-        else if (x >= 14 && x <= 17 && y >= 2 && y <= 4) {
-          layout[y][x] = 1;
-        }
-        // Crafting building (bottom-left)
-        else if (x >= 2 && x <= 5 && y >= 10 && y <= 12) {
-          layout[y][x] = 1;
-        }
-        else {
-          layout[y][x] = 0;
-        }
-      }
-    }
-
-    // Dungeon entrance at top center
-    layout[1][10] = 3;
-
-    // Render tiles
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const px = x * ts + ts / 2;
-        const py = y * ts + ts / 2;
-        const tile = layout[y][x];
-
-        if (tile === 0) {
-          const texKey = Decorator.townGrassVariant(variantRng);
-          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, texKey));
-        } else if (tile === 1) {
-          // Shop building tiles get grass underneath; the storefront sprite covers them
-          const isShopTile = x >= 2 && x <= 5 && y >= 2 && y <= 4;
-          if (isShopTile) {
-            const texKey = Decorator.townGrassVariant(variantRng);
-            this.layerManager.addToLayer('groundLayer', this.add.image(px, py, texKey));
-          } else {
-            this.layerManager.addToLayer('propsLowLayer', this.add.image(px, py, 'town-wall'));
-          }
-          const wall = this.physics.add.staticImage(px, py, 'town-wall');
-          wall.setVisible(false);
-          wall.body.setSize(ts, ts);
-          this.wallLayer.add(wall);
-        } else if (tile === 2) {
-          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-path'));
-        } else if (tile === 3) {
-          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-path'));
-          this.layerManager.addToLayer('propsLowLayer', this.add.image(px, py, 'dungeon-entrance'));
-        }
-      }
-    }
-
-    // Phase 3 – deterministic decal dressing for town grass tiles
-    this._townDecalImages = Decorator.decorateTown(
-      this, layout, w, h, this.layerManager, ts, SeededRNG.townSeed(),
-    );
-
-    // Place storefront sprite on the Shop building (tiles x:2-5, y:2-4)
-    const shopCenterX = (2 + 5) / 2 * ts + ts / 2;
-    const shopCenterY = (2 + 4) / 2 * ts + ts / 2;
-    this.layerManager.addToLayer('propsSolidLayer',
-      this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
-        .setScale(2));
-  }
+  /* ================================================================ */
+  /*  NPCs                                                             */
+  /* ================================================================ */
 
   createNPCs(ts) {
-    // Shop NPC
-    const shopX = 3.5 * ts + ts / 2;
-    const shopY = 5.5 * ts + ts / 2;
+    // Shop NPC (below shop building 3-6, 3-5)
+    const shopX = 4.5 * ts + ts / 2;
+    const shopY = 6.5 * ts + ts / 2;
     this.createNPCMarker(shopX, shopY, 'Shop', 0xffaa00, () => {
       this.openShop();
     });
 
-    // Blacksmith NPC
-    const smithX = 15.5 * ts + ts / 2;
-    const smithY = 5.5 * ts + ts / 2;
+    // Blacksmith NPC (below blacksmith 23-26, 3-5)
+    const smithX = 24.5 * ts + ts / 2;
+    const smithY = 6.5 * ts + ts / 2;
     this.createNPCMarker(smithX, smithY, 'Blacksmith', 0xff6600, () => {
       this.openBlacksmith();
     });
 
-    // Crafting NPC
-    const craftX = 3.5 * ts + ts / 2;
-    const craftY = 9.5 * ts + ts / 2;
+    // Crafting NPC (below crafting 3-6, 15-17)
+    const craftX = 4.5 * ts + ts / 2;
+    const craftY = 18.5 * ts + ts / 2;
     this.createNPCMarker(craftX, craftY, 'Crafting', 0x66aaff, () => {
       this.openCrafting();
     });
@@ -289,13 +180,17 @@ export class TownScene extends Phaser.Scene {
   _createTownLights(ts) {
     if (!this.lightManager) return;
     // Shop building entrance
-    this.lightManager.addLight(3.5 * ts + ts / 2, 5 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffdd99 });
+    this.lightManager.addLight(4.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffdd99 });
     // Blacksmith entrance
-    this.lightManager.addLight(15.5 * ts + ts / 2, 5 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffaa66 });
+    this.lightManager.addLight(24.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffaa66 });
     // Crafting building entrance
-    this.lightManager.addLight(3.5 * ts + ts / 2, 9.5 * ts, { radius: 2.5, alpha: 0.3, tint: 0xaaddff });
+    this.lightManager.addLight(4.5 * ts + ts / 2, 18.5 * ts, { radius: 2.5, alpha: 0.3, tint: 0xaaddff });
     // Dungeon entrance glow
-    this.lightManager.addLight(10 * ts + ts / 2, 1.5 * ts, { radius: 2, alpha: 0.3, tint: 0xccbbff });
+    this.lightManager.addLight(14.5 * ts, 1.5 * ts, { radius: 2, alpha: 0.3, tint: 0xccbbff });
+    // Lantern lights
+    for (const l of [{ x: 12, y: 7 }, { x: 17, y: 7 }, { x: 14, y: 4 }, { x: 15, y: 4 }, { x: 14, y: 18 }, { x: 15, y: 18 }]) {
+      this.lightManager.addLight(l.x * ts + ts / 2, l.y * ts + ts / 2, { radius: 1.8, alpha: 0.3, tint: 0xffdd88 });
+    }
   }
 
   createNPCMarker(x, y, label, color, callback) {
@@ -344,7 +239,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   createDungeonEntrance(ts) {
-    const x = 10 * ts + ts / 2;
+    const x = 14.5 * ts;
     const y = 1 * ts + ts / 2;
 
     const zone = this.add.zone(x, y, ts * 2, ts);
@@ -364,6 +259,10 @@ export class TownScene extends Phaser.Scene {
     this.dungeonZone = zone;
     this.dungeonEntrance = { x, y };
   }
+
+  /* ================================================================ */
+  /*  Shop / Blacksmith / Crafting                                     */
+  /* ================================================================ */
 
   openBlacksmith() {
     const uiScene = this.scene.get('UIScene');
@@ -399,6 +298,10 @@ export class TownScene extends Phaser.Scene {
       this.updateUI();
     }
   }
+
+  /* ================================================================ */
+  /*  Utilities                                                        */
+  /* ================================================================ */
 
   showPopup(x, y, text, color) {
     const popup = this.add.text(x, y, text, {
@@ -441,6 +344,10 @@ export class TownScene extends Phaser.Scene {
       });
     }
   }
+
+  /* ================================================================ */
+  /*  Frame update                                                     */
+  /* ================================================================ */
 
   update(time, delta) {
     if (this.player && this.player.active) {
