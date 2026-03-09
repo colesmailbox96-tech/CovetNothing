@@ -1,4 +1,4 @@
-/** Visual-polish feature flags – Phase 1, 2, 3 & 4 */
+/** Visual-polish feature flags – Phase 1, 2, 3, 4, 5, 6 & 7 */
 export const visualFlags = {
   /** Nearest-neighbor filtering + integer camera scroll */
   enablePixelPerfect: true,
@@ -22,4 +22,8 @@ export const visualFlags = {
   enableMinimap: true,
   /** Phase 6 – compass arrow pointing toward dungeon entrance */
   enableCompass: true,
+  /** Phase 7 – dark overlay with circular gradient light cutouts */
+  enableDarkOverlay: true,
+  /** Phase 7 – subtle color-grade tint (warm golden / cool blue-grey) */
+  enableColorGrade: true,
 };

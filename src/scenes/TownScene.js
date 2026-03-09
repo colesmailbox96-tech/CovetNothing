@@ -103,6 +103,11 @@ export class TownScene extends Phaser.Scene {
     this._createTownLights(ts);
     this.lightManager.createVignette({ alpha: 0.25 });
 
+    // Phase 7 – dark overlay with lantern cutouts + warm golden color grade
+    this.lightManager.createDarkOverlay({ darkness: 0.35 });
+    this._createTownOverlayLights(ts);
+    this.lightManager.createColorGrade(0xffd080, 0.06);
+
     // Phase 5 – decorative particle emitters
     this._createTownParticles(ts);
 
@@ -198,6 +203,25 @@ export class TownScene extends Phaser.Scene {
     for (const l of [{ x: 12, y: 7 }, { x: 17, y: 7 }, { x: 14, y: 4 }, { x: 15, y: 4 }, { x: 14, y: 18 }, { x: 15, y: 18 }]) {
       this.lightManager.addLight(l.x * ts + ts / 2, l.y * ts + ts / 2, { radius: 1.8, alpha: 0.3, tint: 0xffdd88 });
     }
+  }
+
+  /** Phase 7 – Register overlay cutout lights on lantern posts (orange glow, slight flicker). */
+  _createTownOverlayLights(ts) {
+    if (!this.lightManager) return;
+    // Lantern posts – warm orange cutouts with flicker
+    for (const l of [{ x: 12, y: 7 }, { x: 17, y: 7 }, { x: 14, y: 4 }, { x: 15, y: 4 }, { x: 14, y: 18 }, { x: 15, y: 18 }]) {
+      this.lightManager.addOverlayLight(l.x * ts + ts / 2, l.y * ts + ts / 2, {
+        radius: 1.2,
+        flickerAmount: 0.10,
+        flickerSpeed: 1.8 + Math.random() * 0.8,
+      });
+    }
+    // Building entrance area lights (larger, steadier)
+    this.lightManager.addOverlayLight(4.5 * ts + ts / 2, 6 * ts, { radius: 1.6, flickerAmount: 0.04 });
+    this.lightManager.addOverlayLight(24.5 * ts + ts / 2, 6 * ts, { radius: 1.6, flickerAmount: 0.04 });
+    this.lightManager.addOverlayLight(4.5 * ts + ts / 2, 18.5 * ts, { radius: 1.4, flickerAmount: 0.03 });
+    // Dungeon entrance
+    this.lightManager.addOverlayLight(14.5 * ts, 1.5 * ts, { radius: 1.2, flickerAmount: 0.05 });
   }
 
   /** Phase 5 – Decorative particle emitters: leaves, pollen, torch flames. */
@@ -452,6 +476,11 @@ export class TownScene extends Phaser.Scene {
       }
     }
     snapCameraScroll(this.cameras.main);
+
+    // Phase 7 – refresh dark overlay cutouts each frame
+    if (this.lightManager) {
+      this.lightManager.updateOverlay(time);
+    }
   }
 
   /** Return a touch-aware interaction prompt */

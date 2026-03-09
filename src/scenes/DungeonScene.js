@@ -81,6 +81,10 @@ export class DungeonScene extends Phaser.Scene {
     this.lightManager = new LightManager(this);
     this.lightManager.createVignette();
 
+    // Phase 7 – dark overlay with player light radius + cool blue-grey color grade
+    this.lightManager.createDarkOverlay({ darkness: 0.55 });
+    this.lightManager.createColorGrade(0x8899bb, 0.07);
+
     // Create persistent groups (reused across room loads)
     this.enemies = this.physics.add.group();
     this.doorGroup = this.physics.add.staticGroup();
@@ -464,6 +468,11 @@ export class DungeonScene extends Phaser.Scene {
     // Depth is managed by DepthManager y-sort; initial kick via updateEntityDepth
     updateEntityDepth(this.player);
 
+    // Phase 7 – attach light radius to player (set once; persists across room loads)
+    if (this.lightManager && !this.lightManager.playerLight) {
+      this.lightManager.setPlayerLight(this.player, { radius: 2.0 });
+    }
+
     // If this room has enemies and isn't cleared, start combat
     if (!node.cleared && node.type !== 'rest' && node.type !== 'treasure' && node.type !== 'merchant') {
       this._beginRoomCombat(roomId);
@@ -578,6 +587,8 @@ export class DungeonScene extends Phaser.Scene {
     // Phase 4 – room light pools (vignette persists across rooms)
     if (this.lightManager) {
       this.lightManager.clearLights();
+      // Phase 7 – clear per-room overlay lights (player light persists)
+      this.lightManager.clearOverlayLights();
     }
 
     // Wall visuals stored separately
@@ -910,6 +921,8 @@ export class DungeonScene extends Phaser.Scene {
     // Phase 4 – additive light pool (larger & warmer for campfire)
     if (this.lightManager) {
       this.lightManager.addLight(cx, cy, { radius: 3.5, alpha: 0.5, tint: 0xffcc88 });
+      // Phase 7 – overlay cutout for campfire
+      this.lightManager.addOverlayLight(cx, cy, { radius: 2.0, flickerAmount: 0.12 });
     }
   }
 
@@ -986,6 +999,8 @@ export class DungeonScene extends Phaser.Scene {
         // Phase 4 – additive light pool
         if (this.lightManager) {
           this.lightManager.addLight(dx, dy, { radius: 2.5, alpha: 0.4 });
+          // Phase 7 – overlay cutout for torch
+          this.lightManager.addOverlayLight(dx, dy, { radius: 1.3, flickerAmount: 0.10 });
         }
         this.decorations.push({ sprite, glow });
       } else if (deco.type === 'debris') {
@@ -2197,5 +2212,10 @@ export class DungeonScene extends Phaser.Scene {
     updateEntityDepth(this.player);
     updateAllDepths(this.enemies);
     snapCameraScroll(this.cameras.main);
+
+    // Phase 7 – refresh dark overlay cutouts each frame
+    if (this.lightManager) {
+      this.lightManager.updateOverlay(time);
+    }
   }
 }
