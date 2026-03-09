@@ -139,6 +139,16 @@ export class BootScene extends Phaser.Scene {
       this.generateCanopyTexture();
     }
 
+    // Phase 3 – decal & tile-variant textures
+    if (visualFlags.enableDecals) {
+      this.generateDungeonDecalTextures();
+      this.generateTownDecalTextures();
+    }
+    if (visualFlags.enableTileVariants) {
+      this.generateDungeonFloorVariants();
+      this.generateTownGrassVariants();
+    }
+
     // Generate item icons for materials without sprite assets
     this.generateItemIcons();
 
@@ -553,5 +563,162 @@ export class BootScene extends Phaser.Scene {
 
     g.generateTexture('foreground-canopy', w, h);
     g.destroy();
+  }
+
+  /* ================================================================== */
+  /*  Phase 3 – Decal & tile-variant textures                           */
+  /* ================================================================== */
+
+  /** Generate small ground-decal textures for dungeon rooms. */
+  generateDungeonDecalTextures() {
+    const g = this.add.graphics();
+
+    // decal-crack (16×16) – thin floor crack lines
+    g.clear();
+    g.lineStyle(1, 0x1a1a1a, 0.5);
+    g.lineBetween(3, 2, 8, 7);
+    g.lineBetween(8, 7, 6, 13);
+    g.lineBetween(8, 7, 13, 10);
+    g.lineStyle(1, 0x222222, 0.35);
+    g.lineBetween(5, 5, 2, 10);
+    g.generateTexture('decal-crack', 16, 16);
+    g.clear();
+
+    // decal-stain (16×16) – dark blotch
+    g.fillStyle(0x2a2020, 0.3);
+    g.fillCircle(8, 8, 5);
+    g.fillStyle(0x221818, 0.2);
+    g.fillCircle(7, 9, 3);
+    g.generateTexture('decal-stain', 16, 16);
+    g.clear();
+
+    // decal-dust (16×16) – scattered dust specks
+    g.fillStyle(0x888877, 0.25);
+    g.fillRect(2, 4, 2, 1);
+    g.fillRect(7, 2, 1, 2);
+    g.fillRect(12, 6, 2, 1);
+    g.fillRect(5, 11, 1, 2);
+    g.fillRect(10, 12, 2, 1);
+    g.fillRect(3, 8, 1, 1);
+    g.generateTexture('decal-dust', 16, 16);
+    g.clear();
+
+    // decal-rubble (16×16) – small stone fragments
+    g.fillStyle(0x555555, 0.4);
+    g.fillRect(3, 7, 3, 2);
+    g.fillRect(9, 5, 2, 3);
+    g.fillStyle(0x666666, 0.3);
+    g.fillRect(6, 10, 4, 2);
+    g.fillRect(11, 9, 2, 2);
+    g.generateTexture('decal-rubble', 16, 16);
+    g.clear();
+
+    g.destroy();
+  }
+
+  /** Generate small ground-decal textures for the town. */
+  generateTownDecalTextures() {
+    const g = this.add.graphics();
+
+    // decal-leaf (16×16) – fallen leaf
+    g.clear();
+    g.fillStyle(0x6b8e23, 0.4);
+    g.fillEllipse(8, 7, 8, 5);
+    g.fillStyle(0x556b2f, 0.3);
+    g.fillEllipse(9, 8, 5, 3);
+    g.lineStyle(1, 0x3b5e1a, 0.3);
+    g.lineBetween(5, 7, 12, 7);
+    g.generateTexture('decal-leaf', 16, 16);
+    g.clear();
+
+    // decal-weed (16×16) – small weed tuft
+    g.fillStyle(0x4a7a2a, 0.4);
+    g.fillTriangle(8, 2, 5, 12, 11, 12);
+    g.fillStyle(0x3a6a1a, 0.3);
+    g.fillTriangle(6, 4, 3, 13, 9, 13);
+    g.generateTexture('decal-weed', 16, 16);
+    g.clear();
+
+    // decal-puddle (16×16) – tiny water puddle
+    g.fillStyle(0x4488aa, 0.2);
+    g.fillEllipse(8, 9, 10, 6);
+    g.fillStyle(0x66aacc, 0.15);
+    g.fillEllipse(7, 8, 6, 3);
+    g.generateTexture('decal-puddle', 16, 16);
+    g.clear();
+
+    g.destroy();
+  }
+
+  /**
+   * Generate dungeon floor tile variants (dungeon-floor-v0 … v3).
+   * Each variant is a copy of the base 'dungeon-floor' texture with
+   * small procedural differences drawn on top so that adjacent tiles
+   * don't look identical.
+   */
+  generateDungeonFloorVariants() {
+    const ts = 32;
+    const base = this.textures.get('dungeon-floor');
+    const baseSource = base.getSourceImage();
+
+    for (let v = 0; v < 4; v++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = ts;
+      canvas.height = ts;
+      const ctx = canvas.getContext('2d');
+
+      // Draw the original floor tile
+      ctx.drawImage(baseSource, 0, 0, ts, ts);
+
+      // Overlay small procedural marks per variant
+      ctx.globalAlpha = 0.08 + v * 0.03;
+      ctx.fillStyle = v % 2 === 0 ? '#222222' : '#444433';
+      // Each variant has marks at different positions
+      const offsets = [
+        [{ x: 3, y: 5, w: 4, h: 2 }, { x: 18, y: 20, w: 3, h: 3 }],
+        [{ x: 10, y: 3, w: 5, h: 2 }, { x: 22, y: 14, w: 4, h: 2 }],
+        [{ x: 2, y: 16, w: 3, h: 3 }, { x: 20, y: 6, w: 4, h: 2 }],
+        [{ x: 14, y: 24, w: 4, h: 2 }, { x: 6, y: 10, w: 3, h: 3 }],
+      ];
+      for (const mark of offsets[v]) {
+        ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+      }
+
+      ctx.globalAlpha = 1;
+      this.textures.addCanvas(`dungeon-floor-v${v}`, canvas);
+    }
+  }
+
+  /**
+   * Generate town grass tile variants (town-grass-v0 … v2).
+   */
+  generateTownGrassVariants() {
+    const ts = 32;
+    const base = this.textures.get('town-grass');
+    const baseSource = base.getSourceImage();
+
+    for (let v = 0; v < 3; v++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = ts;
+      canvas.height = ts;
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(baseSource, 0, 0, ts, ts);
+
+      // Subtle grass-blade / shade marks per variant
+      ctx.globalAlpha = 0.06 + v * 0.02;
+      ctx.fillStyle = v % 2 === 0 ? '#1a3a0a' : '#2a4a1a';
+      const offsets = [
+        [{ x: 4, y: 8, w: 2, h: 4 }, { x: 20, y: 18, w: 3, h: 3 }],
+        [{ x: 12, y: 4, w: 3, h: 3 }, { x: 24, y: 22, w: 2, h: 4 }],
+        [{ x: 6, y: 20, w: 4, h: 2 }, { x: 16, y: 6, w: 2, h: 4 }],
+      ];
+      for (const mark of offsets[v]) {
+        ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+      }
+
+      ctx.globalAlpha = 1;
+      this.textures.addCanvas(`town-grass-v${v}`, canvas);
+    }
   }
 }

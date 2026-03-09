@@ -69,3 +69,115 @@ entity.
 
 No external art file is required; the texture is created in
 `BootScene.generateShadowTexture()`.
+
+---
+
+## Ground Decals (Phase 3)
+
+Small cosmetic sprites stamped onto the `decalLayer` (depth 100) to
+break up repeating floor textures.  Placement is **deterministic** —
+the same room seed always produces the same decal layout.
+
+### How it works
+
+1. `Decorator.decorateDungeonRoom()` / `Decorator.decorateTown()` is
+   called after the tilemap is built.
+2. A `SeededRNG` (Mulberry32) is initialised from a combined
+   floor + room-id hash so each room is unique yet reproducible.
+3. Each walkable floor tile has a ~12 % chance of receiving a decal.
+4. Weighted selection picks from the decal catalogue; an **adjacency
+   rule** prevents the same decal key from appearing within 3 tiles.
+5. Tiles within 2 tiles of any door opening are excluded.
+
+**Feature flags:** `enableDecals` in `src/config/visualFlags.ts`
+
+### Dungeon decal textures
+
+Generated procedurally in `BootScene.generateDungeonDecalTextures()`:
+
+| Key | Size | Description |
+|-----|------|-------------|
+| `decal-crack` | 16×16 | Thin floor crack lines |
+| `decal-stain` | 16×16 | Dark circular blotch |
+| `decal-dust` | 16×16 | Scattered dust specks |
+| `decal-rubble` | 16×16 | Small stone fragments |
+
+### Town decal textures
+
+Generated in `BootScene.generateTownDecalTextures()`:
+
+| Key | Size | Description |
+|-----|------|-------------|
+| `decal-leaf` | 16×16 | Fallen leaf |
+| `decal-weed` | 16×16 | Small weed tuft |
+| `decal-puddle` | 16×16 | Tiny water puddle |
+
+### Adding new decals
+
+1. Create a 16×16 procedural texture in `BootScene` (or place a PNG
+   in `public/assets/tiles/decals/` and preload it).
+2. Pick a key following the pattern `decal-<name>`.
+3. Add an entry to the relevant catalogue array in
+   `src/systems/Decorator.js` (`DUNGEON_DECALS` or `TOWN_DECALS`):
+   ```js
+   { key: 'decal-myname', weight: 2 },
+   ```
+   Higher weight = more frequent.
+
+---
+
+## Tile Variants (Phase 3)
+
+Base floor textures ship a set of subtle variants so that adjacent
+tiles are not pixel-identical.  Variant selection is seeded per-room
+for determinism.
+
+### Dungeon floor variants
+
+`BootScene.generateDungeonFloorVariants()` creates four canvas textures
+from the base `dungeon-floor` asset:
+
+```
+dungeon-floor-v0  dungeon-floor-v1  dungeon-floor-v2  dungeon-floor-v3
+```
+
+Each variant overlays small, barely-visible marks at different
+positions.  `Decorator.dungeonFloorVariant(rng)` returns a random key.
+
+### Town grass variants
+
+`BootScene.generateTownGrassVariants()` creates three variants:
+
+```
+town-grass-v0  town-grass-v1  town-grass-v2
+```
+
+Selected via `Decorator.townGrassVariant(rng)`.
+
+### Adding new variants
+
+1. Increase the variant count constant in `Decorator.js`
+   (`DUNGEON_FLOOR_VARIANTS` / `TOWN_GRASS_VARIANTS`).
+2. Add a matching generation loop entry in the corresponding
+   `BootScene.generate*Variants()` method.
+3. Each variant should differ only subtly (opacity ≤ 10 %) to stay
+   readable at 2× zoom on mobile.
+
+**Feature flag:** `enableTileVariants` in `src/config/visualFlags.ts`
+
+---
+
+## Seeded RNG Utility
+
+`src/utils/SeededRNG.js` provides a Mulberry32-based PRNG:
+
+```js
+import { SeededRNG } from '../utils/SeededRNG.js';
+
+const rng = new SeededRNG(12345);
+rng.next();          // float [0, 1)
+rng.between(1, 10);  // integer [1, 10]
+
+SeededRNG.roomSeed(floor, roomId);  // combined hash for dungeon rooms
+SeededRNG.townSeed();                // constant seed for town dressing
+```

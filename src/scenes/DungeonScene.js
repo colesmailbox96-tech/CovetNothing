@@ -17,6 +17,8 @@ import { getRandomDescription } from '../data/roomDescriptions.js';
 import { pickFloorModifier } from '../data/floorModifiers.js';
 import { updateEntityDepth, updateAllDepths, snapCameraScroll } from '../systems/DepthManager.js';
 import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
+import { Decorator } from '../systems/Decorator.js';
+import { SeededRNG } from '../utils/SeededRNG.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -351,6 +353,14 @@ export class DungeonScene extends Phaser.Scene {
     // Build tilemap visuals & physics
     this._buildTilemap(roomData);
 
+    // Phase 3 – deterministic decal dressing
+    this._decalImages = [];
+    const decalSeed = SeededRNG.roomSeed(this.currentFloor, roomId);
+    const floorTint = this._getFloorTint();
+    this._decalImages = Decorator.decorateDungeonRoom(
+      this, roomData, this.layerManager, this.tileSize, decalSeed, floorTint,
+    );
+
     // Stairs
     this.stairs = null;
     if (roomData.stairsPos) {
@@ -554,6 +564,12 @@ export class DungeonScene extends Phaser.Scene {
     }
     this._foregroundOverlays = [];
 
+    // Phase 3 – decal images
+    if (this._decalImages) {
+      for (const img of this._decalImages) img.destroy();
+    }
+    this._decalImages = [];
+
     // Wall visuals stored separately
     if (this._wallImages) {
       for (const img of this._wallImages) img.destroy();
@@ -566,6 +582,11 @@ export class DungeonScene extends Phaser.Scene {
     // Progressive floor tint: deeper floors get darker / more ominous
     const floorTint = this._getFloorTint();
 
+    // Seeded RNG for tile-variant selection (same seed → same variants)
+    const variantRng = new SeededRNG(
+      SeededRNG.roomSeed(this.currentFloor, this.currentRoomId) + 7,
+    );
+
     for (let y = 0; y < roomData.height; y++) {
       for (let x = 0; x < roomData.width; x++) {
         const px = x * this.tileSize + this.tileSize / 2;
@@ -573,7 +594,8 @@ export class DungeonScene extends Phaser.Scene {
         const tile = roomData.map[y][x];
 
         if (tile === 0 || tile === 2) {
-          const floor = this.add.image(px, py, 'dungeon-floor');
+          const texKey = Decorator.dungeonFloorVariant(variantRng);
+          const floor = this.add.image(px, py, texKey);
           if (floorTint !== null) floor.setTint(floorTint);
           this.layerManager.addToLayer('groundLayer', floor);
           this.floorGroup.add(floor);
