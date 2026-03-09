@@ -137,14 +137,15 @@ export class TownScene extends Phaser.Scene {
     this.structuresLayer = map.createLayer('structures', tileset, 0, 0);
     this.structuresLayer.setDepth(200);
     // Collision on all structure tiles EXCEPT bridge planks (walkable)
-    const walkableTiles = [T.BRIDGE + 1, T.LANTERN + 1]; // GIDs
+    const walkableTiles = [T.BRIDGE + 1]; // GIDs (bridge planks only)
     this.structuresLayer.setCollisionByExclusion([-1, 0, ...walkableTiles]);
 
     // ---- Canopy layer (renders ABOVE the player for walk-behind) ----
     this.canopyLayer = map.createLayer('canopy', tileset, 0, 0);
-    // Depth higher than any entity: ENTITY_BASE + maxY ≈ 300 + 800 = 1100
-    this.canopyLayer.setDepth(FOREGROUND_DEPTH - 100);
-    this.canopyLayer.setAlpha(1); // tile-level alpha is baked in
+    // Must be above the max entity depth (ENTITY_BASE + MAP_H * TS ≈ 1100)
+    // but below FOREGROUND_DEPTH (10 000) used for UI labels / popups.
+    const CANOPY_DEPTH = FOREGROUND_DEPTH - 100;
+    this.canopyLayer.setDepth(CANOPY_DEPTH);
 
     this.townMap = map;
   }
