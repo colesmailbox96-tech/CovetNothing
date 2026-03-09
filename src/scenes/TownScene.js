@@ -12,6 +12,7 @@ import { updateEntityDepth, snapCameraScroll } from '../systems/DepthManager.js'
 import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 import { Decorator } from '../systems/Decorator.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
+import { LightManager } from '../systems/LightManager.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -93,6 +94,11 @@ export class TownScene extends Phaser.Scene {
 
     // Dungeon entrance
     this.createDungeonEntrance(tileSize);
+
+    // Phase 4 – town lighting (warm lamps near buildings / NPCs)
+    this.lightManager = new LightManager(this);
+    this._createTownLights(tileSize);
+    this.lightManager.createVignette({ alpha: 0.25 });
 
     // Update UI
     this.updateUI();
@@ -277,6 +283,19 @@ export class TownScene extends Phaser.Scene {
     this.createNPCMarker(craftX, craftY, 'Crafting', 0x66aaff, () => {
       this.openCrafting();
     });
+  }
+
+  /** Phase 4 – Place warm light pools near buildings and the dungeon entrance. */
+  _createTownLights(ts) {
+    if (!this.lightManager) return;
+    // Shop building entrance
+    this.lightManager.addLight(3.5 * ts + ts / 2, 5 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffdd99 });
+    // Blacksmith entrance
+    this.lightManager.addLight(15.5 * ts + ts / 2, 5 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffaa66 });
+    // Crafting building entrance
+    this.lightManager.addLight(3.5 * ts + ts / 2, 9.5 * ts, { radius: 2.5, alpha: 0.3, tint: 0xaaddff });
+    // Dungeon entrance glow
+    this.lightManager.addLight(10 * ts + ts / 2, 1.5 * ts, { radius: 2, alpha: 0.3, tint: 0xccbbff });
   }
 
   createNPCMarker(x, y, label, color, callback) {
