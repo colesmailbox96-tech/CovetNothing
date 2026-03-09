@@ -9,6 +9,7 @@ import { CraftingSystem, RECIPES } from '../systems/CraftingSystem.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
 import { updateEntityDepth, snapCameraScroll } from '../systems/DepthManager.js';
+import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 
 export class TownScene extends Phaser.Scene {
   constructor() {
@@ -58,6 +59,9 @@ export class TownScene extends Phaser.Scene {
 
   create() {
     const tileSize = GAME_CONFIG.TILE_SIZE;
+
+    // Phase 2 – layered rendering
+    this.layerManager = new LayerManager(this);
 
     // Create town map (20x15 tiles)
     const townW = 20;
@@ -210,24 +214,24 @@ export class TownScene extends Phaser.Scene {
         const tile = layout[y][x];
 
         if (tile === 0) {
-          this.add.image(px, py, 'town-grass').setDepth(0);
+          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-grass'));
         } else if (tile === 1) {
           // Shop building tiles get grass underneath; the storefront sprite covers them
           const isShopTile = x >= 2 && x <= 5 && y >= 2 && y <= 4;
           if (isShopTile) {
-            this.add.image(px, py, 'town-grass').setDepth(0);
+            this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-grass'));
           } else {
-            this.add.image(px, py, 'town-wall').setDepth(1);
+            this.layerManager.addToLayer('propsLowLayer', this.add.image(px, py, 'town-wall'));
           }
           const wall = this.physics.add.staticImage(px, py, 'town-wall');
           wall.setVisible(false);
           wall.body.setSize(ts, ts);
           this.wallLayer.add(wall);
         } else if (tile === 2) {
-          this.add.image(px, py, 'town-path').setDepth(0);
+          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-path'));
         } else if (tile === 3) {
-          this.add.image(px, py, 'town-path').setDepth(0);
-          this.add.image(px, py, 'dungeon-entrance').setDepth(1);
+          this.layerManager.addToLayer('groundLayer', this.add.image(px, py, 'town-path'));
+          this.layerManager.addToLayer('propsLowLayer', this.add.image(px, py, 'dungeon-entrance'));
         }
       }
     }
@@ -235,9 +239,9 @@ export class TownScene extends Phaser.Scene {
     // Place storefront sprite on the Shop building (tiles x:2-5, y:2-4)
     const shopCenterX = (2 + 5) / 2 * ts + ts / 2;
     const shopCenterY = (2 + 4) / 2 * ts + ts / 2;
-    this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
-      .setScale(2)
-      .setDepth(2);
+    this.layerManager.addToLayer('propsSolidLayer',
+      this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
+        .setScale(2));
   }
 
   createNPCs(ts) {
@@ -264,14 +268,16 @@ export class TownScene extends Phaser.Scene {
   }
 
   createNPCMarker(x, y, label, color, callback) {
-    const circle = this.add.circle(x, y, 10, color, 0.8).setDepth(5);
+    const circle = this.add.circle(x, y, 10, color, 0.8);
+    this.layerManager.addToLayer('entityLayer', circle);
     const text = this.add.text(x, y - 18, label, {
       fontSize: '8px',
       fill: '#ffffff',
       fontFamily: 'monospace',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(6);
+    }).setOrigin(0.5);
+    this.layerManager.addToLayer('foregroundLayer', text);
 
     // Interaction zone
     const zone = this.add.zone(x, y, 40, 40);
@@ -288,7 +294,8 @@ export class TownScene extends Phaser.Scene {
           fontFamily: 'monospace',
           stroke: '#000000',
           strokeThickness: 1,
-        }).setOrigin(0.5).setDepth(6);
+        }).setOrigin(0.5);
+        this.layerManager.addToLayer('foregroundLayer', zone.promptText);
       }
     });
 
@@ -320,7 +327,8 @@ export class TownScene extends Phaser.Scene {
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(6);
+    }).setOrigin(0.5);
+    this.layerManager.addToLayer('foregroundLayer', label);
 
     this.dungeonZone = zone;
     this.dungeonEntrance = { x, y };
@@ -369,7 +377,7 @@ export class TownScene extends Phaser.Scene {
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(25);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 25);
 
     this.tweens.add({
       targets: popup,
@@ -426,7 +434,7 @@ export class TownScene extends Phaser.Scene {
                 stroke: '#000000',
                 strokeThickness: 1,
               }
-            ).setOrigin(0.5).setDepth(20);
+            ).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
           }
 
           if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey('E'))) {

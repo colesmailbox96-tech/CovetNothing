@@ -16,6 +16,7 @@ import { AbilitySystem, ABILITIES } from '../systems/AbilitySystem.js';
 import { getRandomDescription } from '../data/roomDescriptions.js';
 import { pickFloorModifier } from '../data/floorModifiers.js';
 import { updateEntityDepth, updateAllDepths, snapCameraScroll } from '../systems/DepthManager.js';
+import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -69,6 +70,9 @@ export class DungeonScene extends Phaser.Scene {
 
     // Create tile textures (same as before)
     this.createTileTextures();
+
+    // Phase 2 – layered rendering
+    this.layerManager = new LayerManager(this);
 
     // Create persistent groups (reused across room loads)
     this.enemies = this.physics.add.group();
@@ -401,6 +405,10 @@ export class DungeonScene extends Phaser.Scene {
       this._createPots(roomData.potPositions);
     }
 
+    // Phase 2 – foreground canopy overlay (acceptance test: renders above player)
+    this._foregroundOverlays = [];
+    this._createForegroundOverlays(roomData);
+
     // Doors
     this.doors = [];
     this._createDoors(node, roomData);
@@ -438,7 +446,8 @@ export class DungeonScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, worldW, worldH);
     this.cameras.main.setBounds(0, 0, worldW, worldH);
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
-    this.player.setDepth(10);
+    // Depth is managed by DepthManager y-sort; initial kick via updateEntityDepth
+    updateEntityDepth(this.player);
 
     // If this room has enemies and isn't cleared, start combat
     if (!node.cleared && node.type !== 'rest' && node.type !== 'treasure' && node.type !== 'merchant') {
@@ -459,6 +468,8 @@ export class DungeonScene extends Phaser.Scene {
 
   /** Destroy all room-specific game objects */
   _destroyRoomObjects() {
+    // Clear layer manager references (objects destroyed below by scene code)
+    if (this.layerManager) this.layerManager.clearAll();
     // Remove colliders from previous room
     if (this._colliders) {
       for (const c of this._colliders) c.destroy();
@@ -537,6 +548,12 @@ export class DungeonScene extends Phaser.Scene {
     }
     this.pots = [];
 
+    // Foreground overlays
+    if (this._foregroundOverlays) {
+      for (const img of this._foregroundOverlays) img.destroy();
+    }
+    this._foregroundOverlays = [];
+
     // Wall visuals stored separately
     if (this._wallImages) {
       for (const img of this._wallImages) img.destroy();
@@ -556,15 +573,17 @@ export class DungeonScene extends Phaser.Scene {
         const tile = roomData.map[y][x];
 
         if (tile === 0 || tile === 2) {
-          const floor = this.add.image(px, py, 'dungeon-floor').setDepth(0);
+          const floor = this.add.image(px, py, 'dungeon-floor');
           if (floorTint !== null) floor.setTint(floorTint);
+          this.layerManager.addToLayer('groundLayer', floor);
           this.floorGroup.add(floor);
         }
         if (tile === 1) {
           // Only add wall physics if adjacent to a floor tile
           if (this._isAdjacentToFloor(roomData.map, x, y)) {
-            const wallImg = this.add.image(px, py, 'tile-wall').setDepth(1);
+            const wallImg = this.add.image(px, py, 'tile-wall');
             if (floorTint !== null) wallImg.setTint(floorTint);
+            this.layerManager.addToLayer('propsLowLayer', wallImg);
             this._wallImages.push(wallImg);
 
             const wall = this.physics.add.staticImage(px, py, 'tile-wall');
@@ -629,7 +648,7 @@ export class DungeonScene extends Phaser.Scene {
       const doorY = dp.tileY * this.tileSize + this.tileSize / 2;
 
       const doorSprite = this.physics.add.staticImage(doorX, doorY, 'tile-door');
-      doorSprite.setDepth(5);
+      this.layerManager.addToLayer('propsSolidLayer', doorSprite);
       doorSprite.body.setSize(this.tileSize, this.tileSize);
       this.doorGroup.add(doorSprite);
 
@@ -798,7 +817,8 @@ export class DungeonScene extends Phaser.Scene {
   _createStairs(pos) {
     const sx = pos.x * this.tileSize + this.tileSize / 2;
     const sy = pos.y * this.tileSize + this.tileSize / 2;
-    this.stairs = this.add.image(sx, sy, 'tile-stairs').setDepth(1);
+    this.stairs = this.add.image(sx, sy, 'tile-stairs');
+    this.layerManager.addToLayer('decalLayer', this.stairs);
     this.tweens.add({
       targets: this.stairs,
       alpha: 0.6,
@@ -811,7 +831,8 @@ export class DungeonScene extends Phaser.Scene {
   _createCraftingBench(pos) {
     const bx = pos.x * this.tileSize + this.tileSize / 2;
     const by = pos.y * this.tileSize + this.tileSize / 2;
-    this.craftingBench = this.add.image(bx, by, 'tile-crafting-bench').setDepth(2);
+    this.craftingBench = this.add.image(bx, by, 'tile-crafting-bench');
+    this.layerManager.addToLayer('propsSolidLayer', this.craftingBench);
     this.craftingBenchPrompt = null;
   }
 
@@ -819,7 +840,8 @@ export class DungeonScene extends Phaser.Scene {
     // Place in center of room
     const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
     const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
-    this.treasureChest = this.add.image(cx, cy, 'tile-chest').setDepth(2);
+    this.treasureChest = this.add.image(cx, cy, 'tile-chest');
+    this.layerManager.addToLayer('propsSolidLayer', this.treasureChest);
     this.treasureChestPrompt = null;
     this.treasureChestOpened = false;
   }
@@ -827,10 +849,12 @@ export class DungeonScene extends Phaser.Scene {
   _createCampfire(roomData) {
     const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
     const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
-    this.campfire = this.add.image(cx, cy, 'tile-campfire').setDepth(2);
+    this.campfire = this.add.image(cx, cy, 'tile-campfire');
+    this.layerManager.addToLayer('propsSolidLayer', this.campfire);
 
     // Ambient glow circle
-    this._campfireGlow = this.add.circle(cx, cy, 40, 0xff6600, 0.12).setDepth(1);
+    this._campfireGlow = this.add.circle(cx, cy, 40, 0xff6600, 0.12);
+    this.layerManager.addToLayer('decalLayer', this._campfireGlow);
     this.tweens.add({
       targets: this._campfireGlow,
       alpha: 0.06,
@@ -855,7 +879,8 @@ export class DungeonScene extends Phaser.Scene {
   _createMerchant(roomData) {
     const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
     const cy = Math.floor(roomData.height / 2) * this.tileSize + this.tileSize / 2;
-    this.merchant = this.add.image(cx, cy, 'tile-merchant').setDepth(2);
+    this.merchant = this.add.image(cx, cy, 'tile-merchant');
+    this.layerManager.addToLayer('propsSolidLayer', this.merchant);
 
     this._merchantLabel = this.add.text(cx, cy - 22, 'Merchant', {
       fontSize: '8px',
@@ -864,7 +889,8 @@ export class DungeonScene extends Phaser.Scene {
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(6);
+    }).setOrigin(0.5);
+    this.layerManager.addToLayer('foregroundLayer', this._merchantLabel);
 
     // Gentle bob animation
     this.tweens.add({
@@ -880,7 +906,8 @@ export class DungeonScene extends Phaser.Scene {
     for (const pos of trapPositions) {
       const tx = pos.x * this.tileSize + this.tileSize / 2;
       const ty = pos.y * this.tileSize + this.tileSize / 2;
-      const sprite = this.add.image(tx, ty, 'tile-trap').setDepth(1);
+      const sprite = this.add.image(tx, ty, 'tile-trap');
+      this.layerManager.addToLayer('decalLayer', sprite);
       this.traps.push({
         sprite,
         tileX: pos.x,
@@ -897,9 +924,11 @@ export class DungeonScene extends Phaser.Scene {
       const dy = deco.y * this.tileSize + this.tileSize / 2;
 
       if (deco.type === 'torch') {
-        const sprite = this.add.image(dx, dy, 'deco-torch').setDepth(2);
+        const sprite = this.add.image(dx, dy, 'deco-torch');
+        this.layerManager.addToLayer('propsSolidLayer', sprite);
         // Ambient glow circle
-        const glow = this.add.circle(dx, dy, 24, 0xff8800, 0.08).setDepth(0);
+        const glow = this.add.circle(dx, dy, 24, 0xff8800, 0.08);
+        this.layerManager.addToLayer('decalLayer', glow);
         this.tweens.add({
           targets: glow,
           alpha: { from: 0.04, to: 0.1 },
@@ -919,7 +948,8 @@ export class DungeonScene extends Phaser.Scene {
         });
         this.decorations.push({ sprite, glow });
       } else if (deco.type === 'debris') {
-        const sprite = this.add.image(dx, dy, 'deco-debris').setDepth(1).setAlpha(0.7);
+        const sprite = this.add.image(dx, dy, 'deco-debris').setAlpha(0.7);
+        this.layerManager.addToLayer('decalLayer', sprite);
         this.decorations.push({ sprite, glow: null });
       }
     }
@@ -929,13 +959,35 @@ export class DungeonScene extends Phaser.Scene {
     for (const pos of potPositions) {
       const px = pos.x * this.tileSize + this.tileSize / 2;
       const py = pos.y * this.tileSize + this.tileSize / 2;
-      const sprite = this.add.image(px, py, 'deco-pot').setDepth(2);
+      const sprite = this.add.image(px, py, 'deco-pot');
+      this.layerManager.addToLayer('propsSolidLayer', sprite);
       this.pots.push({
         sprite,
         tileX: pos.x,
         tileY: pos.y,
         broken: false,
       });
+    }
+  }
+
+  /**
+   * Phase 2 – Place foreground canopy overlays that render above the player.
+   * One canopy is placed near the room center on every room that has floor
+   * space, demonstrating that the foreground layer draws over entities.
+   */
+  _createForegroundOverlays(roomData) {
+    if (!this.layerManager) return;
+    // Place a canopy in the upper-center area of the room
+    const cx = Math.floor(roomData.width / 2) * this.tileSize + this.tileSize / 2;
+    const cy = Math.floor(roomData.height * 0.35) * this.tileSize + this.tileSize / 2;
+    // Only place if the tile is walkable floor
+    const tx = Math.floor(roomData.width / 2);
+    const ty = Math.floor(roomData.height * 0.35);
+    if (ty >= 0 && ty < roomData.height && tx >= 0 && tx < roomData.width &&
+        (roomData.map[ty][tx] === 0 || roomData.map[ty][tx] === 2)) {
+      const canopy = this.add.image(cx, cy, 'foreground-canopy');
+      this.layerManager.setToForeground(canopy);
+      this._foregroundOverlays.push(canopy);
     }
   }
 
@@ -955,14 +1007,14 @@ export class DungeonScene extends Phaser.Scene {
     pot.broken = true;
     pot.sprite.setTexture('deco-pot-broken');
     pot.sprite.setAlpha(0.6);
-    pot.sprite.setDepth(1);
+    this.layerManager.addToLayer('decalLayer', pot.sprite);
 
     // Spawn break particles
     for (let i = 0; i < 4; i++) {
       const particle = this.add.circle(
         pot.sprite.x, pot.sprite.y,
         Phaser.Math.Between(1, 3), 0x8a5a2a, 0.8
-      ).setDepth(20);
+      ).setDepth(FOREGROUND_DEPTH + 10);
       const angle = (Math.PI * 2 * i) / 4 + (Math.random() - 0.5) * 0.8;
       const dist = Phaser.Math.Between(10, 25);
       this.tweens.add({
@@ -1014,7 +1066,7 @@ export class DungeonScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 3,
       align: 'center',
-    }).setOrigin(0.5).setDepth(30).setAlpha(0);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 30).setAlpha(0);
 
     const descText = this.add.text(cx, cy + 18, mod.description, {
       fontSize: '9px',
@@ -1024,7 +1076,7 @@ export class DungeonScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 2,
       align: 'center',
-    }).setOrigin(0.5).setDepth(30).setAlpha(0);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 30).setAlpha(0);
 
     this.tweens.add({
       targets: [titleText, descText],
@@ -1080,7 +1132,7 @@ export class DungeonScene extends Phaser.Scene {
   createNodeMinimap() {
     this.nodeMapGfx = this.add.graphics();
     this.nodeMapGfx.setScrollFactor(0);
-    this.nodeMapGfx.setDepth(100);
+    this.nodeMapGfx.setDepth(FOREGROUND_DEPTH + 100);
     this._redrawNodeMinimap();
   }
 
@@ -1254,7 +1306,7 @@ export class DungeonScene extends Phaser.Scene {
             door.prompt = this.add.text(dwx, dwy - 20, this._interactHint('Open'), {
               fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2,
-            }).setOrigin(0.5).setDepth(20);
+            }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
           }
           if (justPressedE) {
             this._openDoor(door);
@@ -1265,7 +1317,7 @@ export class DungeonScene extends Phaser.Scene {
             door.prompt = this.add.text(dwx, dwy - 20, 'Locked!', {
               fontSize: '10px', fill: '#ff4444', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2,
-            }).setOrigin(0.5).setDepth(20);
+            }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
           }
         }
       } else {
@@ -1286,7 +1338,7 @@ export class DungeonScene extends Phaser.Scene {
             this._interactHint('Craft'),
             { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5).setDepth(20);
+          ).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
         }
         if (justPressedE && !nearDoor) {
           const uiScene = this.scene.get('UIScene');
@@ -1313,7 +1365,7 @@ export class DungeonScene extends Phaser.Scene {
             this._interactHint('Open'),
             { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5).setDepth(20);
+          ).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
         }
         if (justPressedE && !nearDoor) {
           this._openTreasureChest();
@@ -1337,7 +1389,7 @@ export class DungeonScene extends Phaser.Scene {
             this._interactHint('Rest'),
             { fontSize: '10px', fill: '#44ff88', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5).setDepth(20);
+          ).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
         }
         if (justPressedE && !nearDoor) {
           this._useCampfire();
@@ -1361,7 +1413,7 @@ export class DungeonScene extends Phaser.Scene {
             this._interactHint('Trade'),
             { fontSize: '10px', fill: '#ffdd44', fontFamily: 'monospace',
               stroke: '#000000', strokeThickness: 2 }
-          ).setOrigin(0.5).setDepth(20);
+          ).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
         }
         if (justPressedE && !nearDoor) {
           this._openMerchantShop();
@@ -1387,7 +1439,7 @@ export class DungeonScene extends Phaser.Scene {
         this.stairsPrompt = this.add.text(this.stairs.x, this.stairs.y - 20, this._interactHint('Descend'), {
           fontSize: '10px', fill: '#ffffff', fontFamily: 'monospace',
           stroke: '#000000', strokeThickness: 2,
-        }).setOrigin(0.5).setDepth(20);
+        }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
       }
       if (justPressedE) {
         this.goToNextFloor();
@@ -1622,7 +1674,7 @@ export class DungeonScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const color = palette[Math.floor(Math.random() * palette.length)];
       const size = Phaser.Math.Between(2, 5);
-      const particle = this.add.circle(x, y, size, color, 0.9).setDepth(20);
+      const particle = this.add.circle(x, y, size, color, 0.9).setDepth(FOREGROUND_DEPTH + 20);
 
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
       const dist = Phaser.Math.Between(20, 45);
@@ -1658,7 +1710,7 @@ export class DungeonScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 2,
       align: 'center',
-    }).setOrigin(0.5).setDepth(25).setAlpha(0);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 25).setAlpha(0);
 
     // Fade in, hold, fade out
     this.tweens.add({
@@ -1679,7 +1731,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.textures.exists(textureKey)) return;
 
     const projectile = this.physics.add.image(x, y, textureKey);
-    projectile.setDepth(12);
+    projectile.setDepth(FOREGROUND_DEPTH + 10);
     projectile.setCircle(5);
     projectile.damage = damage;
     this.projectiles.add(projectile);
@@ -1726,7 +1778,7 @@ export class DungeonScene extends Phaser.Scene {
 
   /** Small impact flash when a projectile hits something */
   _spawnProjectileImpact(x, y) {
-    const flash = this.add.circle(x, y, 6, 0xffcc44, 0.8).setDepth(20);
+    const flash = this.add.circle(x, y, 6, 0xffcc44, 0.8).setDepth(FOREGROUND_DEPTH + 20);
     this.tweens.add({
       targets: flash,
       alpha: 0,
@@ -1876,7 +1928,7 @@ export class DungeonScene extends Phaser.Scene {
     const py = this.player.y;
 
     // Visual: spinning ring effect
-    const ring = this.add.circle(px, py, ability.range, 0x44ccff, 0.2).setDepth(15);
+    const ring = this.add.circle(px, py, ability.range, 0x44ccff, 0.2).setDepth(FOREGROUND_DEPTH + 15);
     ring.setStrokeStyle(2, 0x44ccff, 0.5);
     this.tweens.add({
       targets: ring,
@@ -1894,7 +1946,7 @@ export class DungeonScene extends Phaser.Scene {
       const startY = py + Math.sin(angle) * 15;
       const endX = px + Math.cos(angle) * ability.range;
       const endY = py + Math.sin(angle) * ability.range;
-      const particle = this.add.circle(startX, startY, 3, 0x88ddff, 0.8).setDepth(20);
+      const particle = this.add.circle(startX, startY, 3, 0x88ddff, 0.8).setDepth(FOREGROUND_DEPTH + 20);
       this.tweens.add({
         targets: particle,
         x: endX,
@@ -1932,7 +1984,7 @@ export class DungeonScene extends Phaser.Scene {
     const py = this.player.y;
 
     // Visual: expanding shockwave ring
-    const wave = this.add.circle(px, py, 20, 0xff8844, 0.3).setDepth(15);
+    const wave = this.add.circle(px, py, 20, 0xff8844, 0.3).setDepth(FOREGROUND_DEPTH + 15);
     wave.setStrokeStyle(3, 0xff8844, 0.6);
     this.tweens.add({
       targets: wave,
@@ -1948,7 +2000,7 @@ export class DungeonScene extends Phaser.Scene {
       const angle = (Math.PI * 2 * i) / 12;
       const endX = px + Math.cos(angle) * ability.range;
       const endY = py + Math.sin(angle) * ability.range;
-      const particle = this.add.circle(px, py, 2, 0xffaa44, 0.7).setDepth(20);
+      const particle = this.add.circle(px, py, 2, 0xffaa44, 0.7).setDepth(FOREGROUND_DEPTH + 20);
       this.tweens.add({
         targets: particle,
         x: endX,
@@ -2003,7 +2055,7 @@ export class DungeonScene extends Phaser.Scene {
     const popup = this.add.text(x, y, text, {
       fontSize: '12px', fill: color, fontFamily: 'monospace',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(25);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 25);
 
     this.tweens.add({
       targets: popup,

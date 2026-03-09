@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/enemies.js';
 import { GAME_CONFIG, getDirection } from '../config.js';
 import { visualFlags } from '../config/visualFlags.ts';
+import { ENTITY_BASE, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, enemyType, opts = {}) {
@@ -49,7 +50,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Compensate body offset for origin shift (0.5→1.0 on Y)
     const frameH = this.frame ? this.frame.height : data.spriteSize;
     this.body.setOffset(bodyOffset, bodyOffset + 10 + frameH * 0.5);
-    this.setDepth(8);
+    this.setDepth(ENTITY_BASE + y);
 
     // Contact shadow
     if (visualFlags.enableShadows && scene.textures.exists('entity-shadow')) {
@@ -63,7 +64,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       scene.time.delayedCall(200, () => {
         if (this.active) this.clearTint();
       });
-      this._bossGlow = scene.add.circle(x, y - this.displayHeight / 2, data.spriteSize * 0.3, 0xff2222, 0.15).setDepth(7);
+      this._bossGlow = scene.add.circle(x, y - this.displayHeight / 2, data.spriteSize * 0.3, 0xff2222, 0.15).setDepth(ENTITY_BASE + y - 1);
       scene.tweens.add({
         targets: this._bossGlow,
         alpha: { from: 0.08, to: 0.2 },
@@ -88,13 +89,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   createHPBar() {
     this.hpBar = this.scene.add.graphics();
-    this.hpBar.setDepth(15);
+    this.hpBar.setDepth(FOREGROUND_DEPTH + 15);
     if (this.isBoss) {
       const name = `BOSS ${this.data_.name}`;
       this._bossLabel = this.scene.add.text(this.x, this.y - this.displayHeight - 16, name, {
         fontSize: '8px', fill: '#ff6644', fontFamily: 'monospace', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 2,
-      }).setOrigin(0.5).setDepth(15);
+      }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 15);
     }
     this.updateHPBar();
   }
@@ -187,7 +188,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(20);
+    }).setOrigin(0.5).setDepth(FOREGROUND_DEPTH + 20);
 
     this.scene.tweens.add({
       targets: dmgText,
@@ -447,7 +448,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const range = GAME_CONFIG.BOSS_SLAM_RANGE;
 
     // Telegraph: red circle that expands
-    const telegraph = this.scene.add.circle(this.x, this.y, range, 0xff2222, 0.15).setDepth(5);
+    const telegraph = this.scene.add.circle(this.x, this.y, range, 0xff2222, 0.15).setDepth(ENTITY_BASE - 1);
     telegraph.setScale(0.3);
     this.scene.tweens.add({
       targets: telegraph,
@@ -492,7 +493,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         const angle = (Math.PI * 2 * i) / 6;
         const px = this.x + Math.cos(angle) * range * 0.6;
         const py = this.y + Math.sin(angle) * range * 0.6;
-        const particle = this.scene.add.circle(px, py, 3, 0xff4400, 0.8).setDepth(20);
+        const particle = this.scene.add.circle(px, py, 3, 0xff4400, 0.8).setDepth(FOREGROUND_DEPTH + 10);
         this.scene.tweens.add({
           targets: particle,
           x: this.x + Math.cos(angle) * range * 1.2,
@@ -545,7 +546,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         repeat: Math.floor(GAME_CONFIG.BOSS_CHARGE_DURATION / 50),
         callback: () => {
           if (!this.active) return;
-          const ghost = this.scene.add.circle(this.x, this.y, 8, 0xff6600, 0.4).setDepth(5);
+          const ghost = this.scene.add.circle(this.x, this.y, 8, 0xff6600, 0.4).setDepth(ENTITY_BASE + this.y - 1);
           this.scene.tweens.add({
             targets: ghost,
             alpha: 0,

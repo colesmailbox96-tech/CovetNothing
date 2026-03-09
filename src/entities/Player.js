@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG, getDirection } from '../config.js';
 import { visualFlags } from '../config/visualFlags.ts';
+import { ENTITY_BASE } from '../systems/LayerManager.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, levelSystem) {
@@ -30,7 +31,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Compensate body offset for origin shift (0.5→1.0 on Y)
     const frameH = this.frame ? this.frame.height : 0;
     this.body.setOffset(32, 48 + frameH * 0.5);
-    this.setDepth(10);
+    this.setDepth(ENTITY_BASE + y);
 
     // Contact shadow
     if (visualFlags.enableShadows && scene.textures.exists('entity-shadow')) {
@@ -219,7 +220,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         ghost.setScale(this.scaleX, this.scaleY);
         ghost.setAlpha(0.3);
         ghost.setTint(0x88ccff);
-        ghost.setDepth(9);
+        ghost.setDepth(ENTITY_BASE + this.y - 1);
         this.scene.tweens.add({
           targets: ghost,
           alpha: 0,
