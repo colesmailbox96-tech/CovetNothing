@@ -1,8 +1,12 @@
 import { visualFlags } from '../config/visualFlags.ts';
+import { ENTITY_BASE } from './LayerManager.js';
 
 /**
  * DepthManager – sets entity depth = feetY each frame so sprites
  * closer to the bottom of the screen draw on top (standard Y-sort).
+ *
+ * When Phase 2 layers are enabled the depth is offset by ENTITY_BASE
+ * so entities sit inside the entity-layer depth band.
  *
  * Also repositions the contact-shadow sprite if one is attached.
  */
@@ -13,13 +17,17 @@ export function updateEntityDepth(entity) {
 
   if (visualFlags.enableYSort) {
     // With origin (0.5, 1.0) feetY === entity.y
-    entity.setDepth(entity.y);
+    const base = visualFlags.enableLayers ? ENTITY_BASE : 0;
+    entity.setDepth(base + entity.y);
   }
 
   if (visualFlags.enableShadows && entity._shadow) {
     entity._shadow.setPosition(entity.x, entity.y);
     // Shadow always renders just under its owner
-    entity._shadow.setDepth((visualFlags.enableYSort ? entity.y : entity.depth) - 0.5);
+    const ownerDepth = visualFlags.enableYSort
+      ? (visualFlags.enableLayers ? ENTITY_BASE : 0) + entity.y
+      : entity.depth;
+    entity._shadow.setDepth(ownerDepth - 0.5);
     entity._shadow.setVisible(entity.visible);
   }
 }

@@ -134,6 +134,11 @@ export class BootScene extends Phaser.Scene {
     // Generate decoration textures
     this.generateDecorationTextures();
 
+    // Phase 2 – foreground overlay texture (canopy arch for acceptance test)
+    if (visualFlags.enableLayers) {
+      this.generateCanopyTexture();
+    }
+
     // Generate item icons for materials without sprite assets
     this.generateItemIcons();
 
@@ -524,6 +529,29 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.35);
     g.fillEllipse(w / 2, h / 2, w, h);
     g.generateTexture('entity-shadow', w, h);
+    g.destroy();
+  }
+
+  /** Phase 2 – Generate a semi-transparent canopy/arch overlay for foreground test. */
+  generateCanopyTexture() {
+    const w = 64;
+    const h = 48;
+    const g = this.add.graphics();
+
+    // Dark leafy canopy with alpha so the player can be seen underneath
+    g.fillStyle(0x1a3a1a, 0.55);
+    g.fillEllipse(w / 2, h / 2, w, h);
+
+    // Leaf clumps
+    g.fillStyle(0x264e26, 0.50);
+    g.fillEllipse(w * 0.3, h * 0.35, 24, 18);
+    g.fillEllipse(w * 0.7, h * 0.55, 22, 16);
+
+    // Highlight
+    g.fillStyle(0x3b6e3b, 0.3);
+    g.fillEllipse(w * 0.5, h * 0.3, 20, 10);
+
+    g.generateTexture('foreground-canopy', w, h);
     g.destroy();
   }
 }
