@@ -19,6 +19,7 @@ import { updateEntityDepth, updateAllDepths, snapCameraScroll } from '../systems
 import { LayerManager, FOREGROUND_DEPTH } from '../systems/LayerManager.js';
 import { Decorator } from '../systems/Decorator.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
+import { LightManager } from '../systems/LightManager.js';
 
 export class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -75,6 +76,10 @@ export class DungeonScene extends Phaser.Scene {
 
     // Phase 2 – layered rendering
     this.layerManager = new LayerManager(this);
+
+    // Phase 4 – 2D lighting (persists across room loads; lights recreated per room)
+    this.lightManager = new LightManager(this);
+    this.lightManager.createVignette();
 
     // Create persistent groups (reused across room loads)
     this.enemies = this.physics.add.group();
@@ -570,6 +575,11 @@ export class DungeonScene extends Phaser.Scene {
     }
     this._decalImages = [];
 
+    // Phase 4 – room light pools (vignette persists across rooms)
+    if (this.lightManager) {
+      this.lightManager.clearLights();
+    }
+
     // Wall visuals stored separately
     if (this._wallImages) {
       for (const img of this._wallImages) img.destroy();
@@ -896,6 +906,11 @@ export class DungeonScene extends Phaser.Scene {
       repeat: -1,
       duration: 400,
     });
+
+    // Phase 4 – additive light pool (larger & warmer for campfire)
+    if (this.lightManager) {
+      this.lightManager.addLight(cx, cy, { radius: 3.5, alpha: 0.5, tint: 0xffcc88 });
+    }
   }
 
   _createMerchant(roomData) {
@@ -968,6 +983,10 @@ export class DungeonScene extends Phaser.Scene {
           repeat: -1,
           duration: 300 + Math.random() * 200,
         });
+        // Phase 4 – additive light pool
+        if (this.lightManager) {
+          this.lightManager.addLight(dx, dy, { radius: 2.5, alpha: 0.4 });
+        }
         this.decorations.push({ sprite, glow });
       } else if (deco.type === 'debris') {
         const sprite = this.add.image(dx, dy, 'deco-debris').setAlpha(0.7);

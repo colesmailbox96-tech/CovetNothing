@@ -167,6 +167,67 @@ Selected via `Decorator.townGrassVariant(rng)`.
 
 ---
 
+## 2D Lighting (Phase 4)
+
+Cheap additive light pools placed at torches, campfires, and town
+lamp positions to add depth without heavy shaders.  Mobile-safe —
+uses Phaser `ADD` blend mode which maps directly to WebGL additive
+compositing.
+
+### How it works
+
+1. `BootScene.generateLightPoolTexture()` creates a 64×64 canvas with a
+   soft radial gradient (warm centre → transparent edge).
+2. `LightManager` (`src/systems/LightManager.js`) spawns Image sprites
+   using the `light-pool` texture with `BlendMode.ADD`.
+3. Each light receives two looping tweens (alpha flicker + scale flicker)
+   with randomised durations so adjacent lights look organic.
+4. An optional vignette overlay (`Graphics` object, scroll-factor 0) adds
+   subtle corner darkening to world scenes.  Never applied to `UIScene`.
+
+**Feature flags:**
+
+| Flag | Effect |
+|------|--------|
+| `enableLighting` | Additive light-pool sprites at torches / lamps |
+| `enableVignette` | Subtle edge-darkening overlay on world scenes |
+
+### Recommended light sizes
+
+| Context | `radius` | `alpha` | `tint` | Notes |
+|---------|----------|---------|--------|-------|
+| Wall torch | 2.5 | 0.40 | `0xffdcaa` | Default warm glow |
+| Campfire | 3.5 | 0.50 | `0xffcc88` | Larger, slightly warmer |
+| Town NPC lamp | 2.5 | 0.30–0.35 | `0xffdd99` | Softer, subtle |
+| Dungeon entrance | 2.0 | 0.30 | `0xccbbff` | Cool purple tint |
+
+> **Rule of thumb:** keep `alpha ≤ 0.5` and `radius ≤ 4` to avoid
+> blowing out colours on bright floor tiles.
+
+### Placement rules
+
+* Place lights at every **torch** decoration (auto-handled by
+  `DungeonScene._createDecorations()`).
+* Place a light at every **campfire** in rest rooms.
+* In town, place lights near building entrances and the dungeon entrance.
+* Lights are cleaned up on room transition in
+  `DungeonScene._destroyRoomObjects()`.
+* The vignette is created once in `create()` and persists across rooms
+  (it uses `scrollFactor(0)` so it is camera-fixed).
+
+### Adding a new light source
+
+```js
+// Inside any world scene that has a LightManager
+this.lightManager.addLight(worldX, worldY, {
+  radius: 2.5,      // scale multiplier (1 = 64 px)
+  alpha: 0.4,       // base alpha (clamped low to stay subtle)
+  tint: 0xffdcaa,    // hex colour
+});
+```
+
+---
+
 ## Seeded RNG Utility
 
 `src/utils/SeededRNG.js` provides a Mulberry32-based PRNG:

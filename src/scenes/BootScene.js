@@ -149,6 +149,11 @@ export class BootScene extends Phaser.Scene {
       this.generateTownGrassVariants();
     }
 
+    // Phase 4 – light-pool texture for additive lighting
+    if (visualFlags.enableLighting) {
+      this.generateLightPoolTexture();
+    }
+
     // Generate item icons for materials without sprite assets
     this.generateItemIcons();
 
@@ -720,5 +725,31 @@ export class BootScene extends Phaser.Scene {
       ctx.globalAlpha = 1;
       this.textures.addCanvas(`town-grass-v${v}`, canvas);
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Phase 4 – Light-pool radial gradient texture                       */
+  /* ------------------------------------------------------------------ */
+  generateLightPoolTexture() {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = size / 2;
+
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, 'rgba(255, 220, 140, 0.7)');
+    grad.addColorStop(0.3, 'rgba(255, 180, 80, 0.35)');
+    grad.addColorStop(0.7, 'rgba(255, 140, 40, 0.08)');
+    grad.addColorStop(1, 'rgba(255, 120, 20, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    this.textures.addCanvas('light-pool', canvas);
   }
 }
