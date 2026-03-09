@@ -13,9 +13,9 @@ export const visualFlags = {
   /** Phase 3 – seeded floor-tile variants to break repetition */
   enableTileVariants: true,
   /** Phase 4 – additive light pools at torches / lamps (mobile-safe) */
-  enableLighting: true,
+  enableLighting: false,
   /** Phase 4 – subtle vignette overlay (DungeonScene only; disabled for bright outdoor TownScene) */
-  enableVignette: true,
+  enableVignette: false,
   /** TownScene override – no vignette for outdoor daytime area */
   enableVignetteTown: false,
   /** Phase 5 – decorative particle emitters (leaves, pollen, flames) */
