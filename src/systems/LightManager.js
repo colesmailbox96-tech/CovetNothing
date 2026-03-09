@@ -292,7 +292,7 @@ export class LightManager {
     }
 
     // Erase cutout for player light
-    if (this.playerLight && this.playerLight.player && this.playerLight.player.active) {
+    if (this.playerLight && this.playerLight.player && this.playerLight.player.active !== false) {
       const p = this.playerLight.player;
       const sx = (p.x - cam.scrollX) * zoom;
       const sy = (p.y - cam.scrollY) * zoom;

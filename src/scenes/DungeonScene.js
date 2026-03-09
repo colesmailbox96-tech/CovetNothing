@@ -468,8 +468,8 @@ export class DungeonScene extends Phaser.Scene {
     // Depth is managed by DepthManager y-sort; initial kick via updateEntityDepth
     updateEntityDepth(this.player);
 
-    // Phase 7 – attach light radius to player (set once; persists across room loads)
-    if (this.lightManager && !this.lightManager.playerLight) {
+    // Phase 7 – attach light radius to player (update ref each room load in case player was recreated)
+    if (this.lightManager) {
       this.lightManager.setPlayerLight(this.player, { radius: 2.0 });
     }
 
