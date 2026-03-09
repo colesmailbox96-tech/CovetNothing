@@ -13,6 +13,7 @@ import { LayerManager, ENTITY_BASE, FOREGROUND_DEPTH } from '../systems/LayerMan
 import { Decorator } from '../systems/Decorator.js';
 import { SeededRNG } from '../utils/SeededRNG.js';
 import { LightManager } from '../systems/LightManager.js';
+import { visualFlags } from '../config/visualFlags.ts';
 import { TownParticleManager } from '../systems/TownParticleManager.js';
 import { T, MAP_W, MAP_H, TS } from '../data/townMapData.js';
 
@@ -98,14 +99,19 @@ export class TownScene extends Phaser.Scene {
       this.add.image(shopCenterX, shopCenterY, 'storefront-sprites', 0)
         .setScale(2));
 
-    // Phase 4 – town lighting (warm lamps near buildings / NPCs)
+    // Phase 4 – town lighting (warm accent lamps near buildings / NPCs)
     this.lightManager = new LightManager(this);
     this._createTownLights(ts);
-    this.lightManager.createVignette({ alpha: 0.25 });
+    if (visualFlags.enableVignetteTown) {
+      this.lightManager.createVignette({ alpha: 0.25 });
+    }
 
-    // Phase 7 – dark overlay with lantern cutouts + warm golden color grade
-    this.lightManager.createDarkOverlay({ darkness: 0.35 });
-    this._createTownOverlayLights(ts);
+    // Phase 7 – TownScene is a bright outdoor daytime area: no dark overlay,
+    // only a subtle warm golden color grade for atmosphere.
+    if (visualFlags.enableDarkOverlayTown) {
+      this.lightManager.createDarkOverlay({ darkness: 0.35 });
+      this._createTownOverlayLights(ts);
+    }
     this.lightManager.createColorGrade(0xffd080, 0.06);
 
     // Phase 5 – decorative particle emitters
@@ -188,20 +194,20 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  /** Phase 4 – Place warm light pools near buildings and the dungeon entrance. */
+  /** Phase 4 – Place warm accent light pools near buildings and the dungeon entrance. */
   _createTownLights(ts) {
     if (!this.lightManager) return;
-    // Shop building entrance
-    this.lightManager.addLight(4.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffdd99 });
+    // Shop building entrance – subtle warm accent
+    this.lightManager.addLight(4.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.18, tint: 0xffdd99 });
     // Blacksmith entrance
-    this.lightManager.addLight(24.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.35, tint: 0xffaa66 });
+    this.lightManager.addLight(24.5 * ts + ts / 2, 6 * ts, { radius: 2.5, alpha: 0.18, tint: 0xffaa66 });
     // Crafting building entrance
-    this.lightManager.addLight(4.5 * ts + ts / 2, 18.5 * ts, { radius: 2.5, alpha: 0.3, tint: 0xaaddff });
+    this.lightManager.addLight(4.5 * ts + ts / 2, 18.5 * ts, { radius: 2.5, alpha: 0.15, tint: 0xaaddff });
     // Dungeon entrance glow
-    this.lightManager.addLight(14.5 * ts, 1.5 * ts, { radius: 2, alpha: 0.3, tint: 0xccbbff });
-    // Lantern lights
+    this.lightManager.addLight(14.5 * ts, 1.5 * ts, { radius: 2, alpha: 0.15, tint: 0xccbbff });
+    // Lantern lights – subtle warm glow accent
     for (const l of [{ x: 12, y: 7 }, { x: 17, y: 7 }, { x: 14, y: 4 }, { x: 15, y: 4 }, { x: 14, y: 18 }, { x: 15, y: 18 }]) {
-      this.lightManager.addLight(l.x * ts + ts / 2, l.y * ts + ts / 2, { radius: 1.8, alpha: 0.3, tint: 0xffdd88 });
+      this.lightManager.addLight(l.x * ts + ts / 2, l.y * ts + ts / 2, { radius: 1.8, alpha: 0.15, tint: 0xffdd88 });
     }
   }
 
