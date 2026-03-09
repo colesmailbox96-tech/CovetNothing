@@ -18,4 +18,8 @@ export const visualFlags = {
   enableVignette: true,
   /** Phase 5 – decorative particle emitters (leaves, pollen, flames) */
   enableParticles: true,
+  /** Phase 6 – minimap overlay in top-right corner */
+  enableMinimap: true,
+  /** Phase 6 – compass arrow pointing toward dungeon entrance */
+  enableCompass: true,
 };
