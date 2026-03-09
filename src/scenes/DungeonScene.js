@@ -82,7 +82,7 @@ export class DungeonScene extends Phaser.Scene {
     this.lightManager.createVignette();
 
     // Phase 7 – dark overlay with player light radius + cool blue-grey color grade
-    this.lightManager.createDarkOverlay({ darkness: 0.55 });
+    this.lightManager.createDarkOverlay({ darkness: 0.45 });
     this.lightManager.createColorGrade(0x8899bb, 0.07);
 
     // Create persistent groups (reused across room loads)
@@ -468,9 +468,9 @@ export class DungeonScene extends Phaser.Scene {
     // Depth is managed by DepthManager y-sort; initial kick via updateEntityDepth
     updateEntityDepth(this.player);
 
-    // Phase 7 – attach light radius to player (update ref each room load in case player was recreated)
+    // Phase 7 – attach light radius to player (larger radius for better dungeon visibility)
     if (this.lightManager) {
-      this.lightManager.setPlayerLight(this.player, { radius: 2.0 });
+      this.lightManager.setPlayerLight(this.player, { radius: 3.5 });
     }
 
     // If this room has enemies and isn't cleared, start combat

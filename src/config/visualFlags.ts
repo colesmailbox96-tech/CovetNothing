@@ -14,16 +14,20 @@ export const visualFlags = {
   enableTileVariants: true,
   /** Phase 4 – additive light pools at torches / lamps (mobile-safe) */
   enableLighting: true,
-  /** Phase 4 – subtle vignette overlay on world scenes (optional) */
+  /** Phase 4 – subtle vignette overlay (DungeonScene only; disabled for bright outdoor TownScene) */
   enableVignette: true,
+  /** TownScene override – no vignette for outdoor daytime area */
+  enableVignetteTown: false,
   /** Phase 5 – decorative particle emitters (leaves, pollen, flames) */
   enableParticles: true,
   /** Phase 6 – minimap overlay in top-right corner */
   enableMinimap: true,
   /** Phase 6 – compass arrow pointing toward dungeon entrance */
   enableCompass: true,
-  /** Phase 7 – dark overlay with circular gradient light cutouts */
+  /** Phase 7 – dark overlay with circular gradient light cutouts (DungeonScene only) */
   enableDarkOverlay: true,
+  /** TownScene override – no dark overlay for outdoor daytime area */
+  enableDarkOverlayTown: false,
   /** Phase 7 – subtle color-grade tint (warm golden / cool blue-grey) */
   enableColorGrade: true,
 };
