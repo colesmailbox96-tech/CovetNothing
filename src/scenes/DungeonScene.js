@@ -12,6 +12,7 @@ import { CraftingSystem } from '../systems/CraftingSystem.js';
 import { ITEM_DATA } from '../data/items.js';
 import { StatusEffectSystem } from '../systems/StatusEffectSystem.js';
 import { RunStats } from '../systems/RunStats.js';
+import { AbilitySystem, ABILITIES } from '../systems/AbilitySystem.js';
 import { getRandomDescription } from '../data/roomDescriptions.js';
 import { pickFloorModifier } from '../data/floorModifiers.js';
 
@@ -42,6 +43,12 @@ export class DungeonScene extends Phaser.Scene {
     this.runStats.recordFloorDescended(this.currentFloor);
     // Pick floor modifier for this floor
     this.floorModifier = pickFloorModifier(this.currentFloor);
+    // Ability system
+    this.abilitySystem = this.registry.get('abilitySystem');
+    if (!this.abilitySystem) {
+      this.abilitySystem = new AbilitySystem();
+      this.registry.set('abilitySystem', this.abilitySystem);
+    }
   }
 
   create() {
@@ -90,6 +97,7 @@ export class DungeonScene extends Phaser.Scene {
       this._shakeCamera();
     });
     this.events.on('enemyRangedAttack', this._handleRangedAttack, this);
+    this.events.on('useAbility', this._handleAbility, this);
 
     // Build node minimap
     this.createNodeMinimap();
@@ -1806,22 +1814,186 @@ export class DungeonScene extends Phaser.Scene {
     const lostGold = Math.floor(this.levelSystem.gold * 0.1);
     this.levelSystem.gold -= lostGold;
 
+    // Freeze gameplay
+    this.player.setVelocity(0, 0);
+    if (this.player.body) this.player.body.enable = false;
+
     // Show death summary
     const summary = this.runStats.getSummary();
     this.showPopup(this.player.x, this.player.y, 'YOU DIED', '#ff0000');
 
-    // Display run summary via UIScene overlay
+    // Display run summary via UIScene overlay (interactive — player dismisses)
     const uiScene = this.scene.get('UIScene');
     if (uiScene) {
-      uiScene.showDeathSummary(summary, lostGold);
+      uiScene.showDeathSummary(summary, lostGold, () => {
+        // Callback when player clicks "Return to Town"
+        uiScene._destroyOverlayPanel();
+        this.runStats.reset();
+        this.statusEffects.clear();
+        this.abilitySystem.reset();
+        this.scene.start('TownScene');
+      });
+    }
+  }
+
+  // ===================== ABILITY SYSTEM =====================
+
+  _handleAbility(abilityId) {
+    if (!this.player || !this.player.active || this.player.hp <= 0) return;
+
+    const ability = ABILITIES[abilityId];
+    if (!ability) return;
+
+    // Check level requirement
+    if (!this.abilitySystem.isUnlocked(abilityId, this.levelSystem.level)) {
+      this.showPopup(this.player.x, this.player.y - 20, `Unlocks at Lv${ability.unlockLevel}`, '#888888');
+      return;
     }
 
-    this.time.delayedCall(4000, () => {
-      if (uiScene) uiScene._destroyOverlayPanel();
-      this.runStats.reset();
-      this.statusEffects.clear();
-      this.scene.start('TownScene');
+    // Check cooldown
+    if (!this.abilitySystem.isReady(abilityId)) {
+      const remaining = this.abilitySystem.getCooldownRemaining(abilityId).toFixed(1);
+      this.showPopup(this.player.x, this.player.y - 20, `${remaining}s`, '#888888');
+      return;
+    }
+
+    // Execute ability
+    this.abilitySystem.use(abilityId);
+
+    if (abilityId === 'whirlwind') {
+      this._executeWhirlwind();
+    } else if (abilityId === 'war_cry') {
+      this._executeWarCry();
+    }
+
+    this.updateUI();
+  }
+
+  _executeWhirlwind() {
+    const ability = ABILITIES.whirlwind;
+    const px = this.player.x;
+    const py = this.player.y;
+
+    // Visual: spinning ring effect
+    const ring = this.add.circle(px, py, ability.range, 0x44ccff, 0.2).setDepth(15);
+    ring.setStrokeStyle(2, 0x44ccff, 0.5);
+    this.tweens.add({
+      targets: ring,
+      scaleX: 1.3,
+      scaleY: 1.3,
+      alpha: 0,
+      duration: 400,
+      onComplete: () => ring.destroy(),
     });
+
+    // Spinning blade particles
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const startX = px + Math.cos(angle) * 15;
+      const startY = py + Math.sin(angle) * 15;
+      const endX = px + Math.cos(angle) * ability.range;
+      const endY = py + Math.sin(angle) * ability.range;
+      const particle = this.add.circle(startX, startY, 3, 0x88ddff, 0.8).setDepth(20);
+      this.tweens.add({
+        targets: particle,
+        x: endX,
+        y: endY,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => particle.destroy(),
+      });
+    }
+
+    // Apply floor modifier damage bonus
+    const dmgMult = (this.floorModifier && this.floorModifier.effects.playerDamageMultiplier) || 1;
+    const baseDamage = Math.floor(this.levelSystem.getAttack() * ability.damageMultiplier * dmgMult);
+
+    // Damage all enemies in range
+    const enemies = this.enemies.getChildren();
+    for (const enemy of enemies) {
+      if (!enemy.active || enemy.state === 'dead') continue;
+      const dist = Phaser.Math.Distance.Between(px, py, enemy.x, enemy.y);
+      if (dist < ability.range) {
+        enemy.takeDamage(baseDamage);
+        this.runStats.recordDamageDealt(baseDamage);
+      }
+    }
+
+    // Camera effect
+    this.cameras.main.shake(100, 0.003);
+
+    this.showPopup(px, py - 30, '🌀 Whirlwind!', '#44ccff');
+  }
+
+  _executeWarCry() {
+    const ability = ABILITIES.war_cry;
+    const px = this.player.x;
+    const py = this.player.y;
+
+    // Visual: expanding shockwave ring
+    const wave = this.add.circle(px, py, 20, 0xff8844, 0.3).setDepth(15);
+    wave.setStrokeStyle(3, 0xff8844, 0.6);
+    this.tweens.add({
+      targets: wave,
+      scaleX: ability.range / 20,
+      scaleY: ability.range / 20,
+      alpha: 0,
+      duration: 500,
+      onComplete: () => wave.destroy(),
+    });
+
+    // Radial burst particles
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const endX = px + Math.cos(angle) * ability.range;
+      const endY = py + Math.sin(angle) * ability.range;
+      const particle = this.add.circle(px, py, 2, 0xffaa44, 0.7).setDepth(20);
+      this.tweens.add({
+        targets: particle,
+        x: endX,
+        y: endY,
+        alpha: 0,
+        scaleX: 0.3,
+        scaleY: 0.3,
+        duration: 400,
+        onComplete: () => particle.destroy(),
+      });
+    }
+
+    // Apply attack buff via status effects
+    this.statusEffects.apply(
+      'strength_boost',
+      'War Cry',
+      'buff',
+      ability.buffDuration,
+      ability.buffMagnitude
+    );
+
+    // Knockback nearby enemies
+    const enemies = this.enemies.getChildren();
+    for (const enemy of enemies) {
+      if (!enemy.active || enemy.state === 'dead') continue;
+      const dist = Phaser.Math.Distance.Between(px, py, enemy.x, enemy.y);
+      if (dist < ability.range) {
+        const dx = enemy.x - px;
+        const dy = enemy.y - py;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        // Apply knockback velocity
+        enemy.setVelocity(
+          (dx / len) * ability.knockbackForce,
+          (dy / len) * ability.knockbackForce
+        );
+        // Reset velocity after brief knockback
+        this.time.delayedCall(250, () => {
+          if (enemy.active) enemy.setVelocity(0, 0);
+        });
+      }
+    }
+
+    // Camera effect
+    this.cameras.main.shake(150, 0.004);
+
+    this.showPopup(px, py - 30, '📯 War Cry!', '#ff8844');
   }
 
   // ===================== HELPERS =====================
@@ -1862,6 +2034,7 @@ export class DungeonScene extends Phaser.Scene {
       inventory: this.inventory.getItems(),
       activeEffects: this.statusEffects ? this.statusEffects.getActiveEffects() : [],
       floorModifier: this.floorModifier || null,
+      abilities: this.abilitySystem ? this.abilitySystem.getAbilityStates(this.levelSystem.level) : [],
     });
   }
 
@@ -1887,6 +2060,11 @@ export class DungeonScene extends Phaser.Scene {
     // Tick status effects
     if (this.statusEffects) {
       this.statusEffects.update(delta);
+    }
+
+    // Tick ability cooldowns
+    if (this.abilitySystem) {
+      this.abilitySystem.update(delta);
     }
 
     if (this.player && this.player.active) {

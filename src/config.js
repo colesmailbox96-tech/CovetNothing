@@ -74,6 +74,18 @@ export const GAME_CONFIG = {
   POT_GOLD_MIN: 1,
   POT_GOLD_MAX: 4,
   POT_ITEM_CHANCE: 0.2,        // 20% chance a pot drops an item
+
+  // Boss special attacks
+  BOSS_SLAM_COOLDOWN: 6000,      // ms between ground slams
+  BOSS_SLAM_RANGE: 60,           // px AoE radius
+  BOSS_SLAM_TRIGGER_RANGE: 1.5,  // multiplier on SLAM_RANGE for activation distance
+  BOSS_SLAM_DAMAGE_MULT: 1.2,    // multiplied by base attack
+  BOSS_SLAM_WINDUP: 600,         // ms telegraph before damage
+  BOSS_CHARGE_COOLDOWN: 8000,    // ms between charges
+  BOSS_CHARGE_SPEED: 280,        // px/s
+  BOSS_CHARGE_DURATION: 400,     // ms
+  BOSS_CHARGE_DAMAGE_MULT: 1.5,
+  BOSS_CHARGE_HIT_RADIUS: 45,   // px distance for charge impact
 };
 
 export const DIRECTIONS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];

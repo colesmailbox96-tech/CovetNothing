@@ -64,7 +64,7 @@ export class UIScene extends Phaser.Scene {
       }
       Object.assign(this.stats, data);
       const now = Date.now();
-      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.floorModifier || {}).id || ''}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}`;
+      const statsJSON = `${data.hp}|${data.maxHp}|${data.level}|${data.exp}|${data.gold}|${data.attack}|${data.defense}|${(data.activeEffects || []).length}|${(data.floorModifier || {}).id || ''}|${(data.inventory || []).map(i => i.itemId + ':' + i.quantity).join(',')}|${(data.abilities || []).map(a => a.id + ':' + a.ready + ':' + Math.floor(a.cooldownSec)).join(',')}`;
 
       // If the fingerprint hasn't changed, skip any HUD work entirely.
       if (statsJSON === this._lastHUDStatsJSON) {
@@ -324,6 +324,19 @@ export class UIScene extends Phaser.Scene {
     this.createTouchButton(rightX, bottomY - (btnRadius * 2 + pad) * 2, btnRadius * 0.8, '💨', 0x88ccff, () => {
       this.emitTouchAction('dash');
     });
+
+    // Ability buttons (left column, only in dungeon)
+    if (this.stats.location === 'dungeon') {
+      const abX = rightX - (btnRadius * 2 + pad) * 2;
+      // Whirlwind (ability 1)
+      this.createTouchButton(abX, bottomY - btnRadius * 2 - pad, btnRadius * 0.75, '🌀', 0x44ccff, () => {
+        this.emitTouchAction('ability1');
+      });
+      // War Cry (ability 2)
+      this.createTouchButton(abX, bottomY - (btnRadius * 2 + pad) * 2, btnRadius * 0.75, '📯', 0xff8844, () => {
+        this.emitTouchAction('ability2');
+      });
+    }
   }
 
   createTouchButton(x, y, radius, label, color, callback) {
@@ -413,6 +426,16 @@ export class UIScene extends Phaser.Scene {
       if (player && player.active && player.tryDash) {
         player.tryDash();
       }
+    } else if (action === 'ability1') {
+      const dungeonScene = this.scene.get('DungeonScene');
+      if (dungeonScene && dungeonScene.scene.isActive()) {
+        dungeonScene.events.emit('useAbility', 'whirlwind');
+      }
+    } else if (action === 'ability2') {
+      const dungeonScene = this.scene.get('DungeonScene');
+      if (dungeonScene && dungeonScene.scene.isActive()) {
+        dungeonScene.events.emit('useAbility', 'war_cry');
+      }
     }
   }
 
@@ -472,7 +495,8 @@ export class UIScene extends Phaser.Scene {
     const effectCount = (this.stats.activeEffects || []).length;
     const hasDashIndicator = this.stats.location === 'dungeon' ? 1 : 0;
     const hasFloorMod = (this.stats.location === 'dungeon' && this.stats.floorModifier && this.stats.floorModifier.id !== 'none') ? 1 : 0;
-    const panelHeight = 125 + (effectCount + hasDashIndicator + hasFloorMod) * effectLineHeight;
+    const abilityCount = (this.stats.location === 'dungeon' && this.stats.abilities) ? this.stats.abilities.length : 0;
+    const panelHeight = 125 + (effectCount + hasDashIndicator + hasFloorMod + abilityCount) * effectLineHeight;
     const panelBg = this.add.rectangle(
       panelX - pad, panelY - pad / 2,
       barWidth + pad * 3, panelHeight,
@@ -571,10 +595,10 @@ export class UIScene extends Phaser.Scene {
     }
 
     // Dash cooldown indicator
+    let nextY = potionCount > 0 ? potionY + 12 + effects.length * effectLineHeight : potionY + effects.length * effectLineHeight;
     if (this.stats.location === 'dungeon') {
       const player = this.getActivePlayer();
       const dashReady = !player || (player.dashCooldown <= 0 && !player.isDashing);
-      const dashY = potionCount > 0 ? potionY + 12 + effects.length * effectLineHeight : potionY + effects.length * effectLineHeight;
       const dashColor = dashReady ? '#88ccff' : '#666666';
       let dashLabel;
       if (dashReady) {
@@ -585,33 +609,55 @@ export class UIScene extends Phaser.Scene {
       } else {
         dashLabel = '💨 Dash...';
       }
-      const dashText = this.add.text(panelX, dashY, dashLabel, {
+      const dashText = this.add.text(panelX, nextY, dashLabel, {
         fontSize: '8px', fill: dashColor, fontFamily: 'monospace',
         stroke: '#000000', strokeThickness: 1,
       });
       this.uiContainer.add(dashText);
+      nextY += effectLineHeight;
+    }
+
+    // Ability indicators (dungeon only)
+    const abilities = this.stats.abilities || [];
+    if (this.stats.location === 'dungeon' && abilities.length > 0) {
+      for (const ab of abilities) {
+        let abLabel, abColor;
+        if (!ab.unlocked) {
+          abLabel = `${ab.icon} ${ab.name} (Lv${ab.unlockLevel})`;
+          abColor = '#444444';
+        } else if (ab.ready) {
+          abLabel = `${ab.icon} ${ab.name} Ready (${ab.keyDisplay})`;
+          abColor = '#44ffaa';
+        } else {
+          abLabel = `${ab.icon} ${ab.name} (${ab.cooldownSec.toFixed(1)}s)`;
+          abColor = '#888888';
+        }
+        const abText = this.add.text(panelX, nextY, abLabel, {
+          fontSize: '8px', fill: abColor, fontFamily: 'monospace',
+          stroke: '#000000', strokeThickness: 1,
+        });
+        this.uiContainer.add(abText);
+        nextY += effectLineHeight;
+      }
     }
 
     // Floor modifier indicator (dungeon only, when not calm)
     const floorMod = this.stats.floorModifier;
     if (this.stats.location === 'dungeon' && floorMod && floorMod.id !== 'none') {
-      const dashOffset = this.stats.location === 'dungeon' ? effectLineHeight : 0;
-      const modY = potionCount > 0
-        ? potionY + 12 + effects.length * effectLineHeight + dashOffset
-        : potionY + effects.length * effectLineHeight + dashOffset;
-      const modText = this.add.text(panelX, modY,
+      const modText = this.add.text(panelX, nextY,
         `${floorMod.icon} ${floorMod.name}`, {
           fontSize: '8px', fill: floorMod.color, fontFamily: 'monospace',
           fontStyle: 'bold', stroke: '#000000', strokeThickness: 1,
         });
       this.uiContainer.add(modText);
+      nextY += effectLineHeight;
     }
 
     // ---- Bottom: Controls hint ----
     const controlsY = height - Math.max(20, this.safeArea.bottom + 8);
     const controlsText = this.isTouchDevice
       ? ''
-      : 'WASD: Move | SPACE: Attack | SHIFT: Dash | E: Interact | Q: Potion | I: Inventory';
+      : 'WASD: Move | SPACE: Attack | SHIFT: Dash | 1/2: Abilities | E: Interact | Q: Potion | I: Inv';
     if (controlsText) {
       this.controlsHint = this.add.text(width / 2, controlsY, controlsText, {
         fontSize: '9px', fill: '#888888', fontFamily: 'monospace',
@@ -1170,24 +1216,24 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  showDeathSummary(summary, goldLost) {
+  showDeathSummary(summary, goldLost, onReturn) {
     if (this._overlayPanel) this._destroyOverlayPanel();
 
     const { width, height } = this.scale;
     const panelW = Math.min(280, width * 0.45);
-    const panelH = Math.min(330, height * 0.6);
+    const panelH = Math.min(360, height * 0.65);
     const panelX = width / 2 - panelW / 2;
     const panelY = height / 2 - panelH / 2;
 
     this._overlayPanel = this.add.container(0, 0).setDepth(500);
 
-    // Dim overlay
+    // Dim overlay (blocks interaction with game behind)
     const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
-      .setOrigin(0, 0);
+      .setOrigin(0, 0).setInteractive();
     this._overlayPanel.add(overlay);
 
     // Panel background
-    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a0a0a, 0.95).setOrigin(0, 0);
+    const bg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x1a0a0a, 0.95).setOrigin(0, 0).setInteractive();
     const border = this.add.rectangle(panelX, panelY, panelW, panelH).setOrigin(0, 0);
     border.setStrokeStyle(2, 0xff0000);
     this._overlayPanel.add([bg, border]);
@@ -1228,13 +1274,34 @@ export class UIScene extends Phaser.Scene {
       yOffset += 16;
     }
 
-    // Return message
-    const returnText = this.add.text(panelX + panelW / 2, panelY + panelH - 16,
-      'Returning to town...', {
-        fontSize: '8px', fill: '#888888', fontFamily: 'monospace',
-        stroke: '#000000', strokeThickness: 1,
-      }).setOrigin(0.5);
-    this._overlayPanel.add(returnText);
+    // "Return to Town" button
+    const btnW = panelW - 40;
+    const btnH = 28;
+    const btnX = panelX + panelW / 2;
+    const btnY = panelY + panelH - 24;
+
+    const btnBg = this.add.rectangle(btnX, btnY, btnW, btnH, 0x882222, 0.9)
+      .setOrigin(0.5).setInteractive();
+    const btnBorder = this.add.rectangle(btnX, btnY, btnW, btnH)
+      .setOrigin(0.5);
+    btnBorder.setStrokeStyle(2, 0xff4444);
+    const btnText = this.add.text(btnX, btnY, '⚔ Return to Town', {
+      fontSize: '11px', fill: '#ffffff', fontFamily: 'monospace',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5);
+
+    btnBg.on('pointerover', () => {
+      btnBg.setFillStyle(0xaa3333, 1);
+    });
+    btnBg.on('pointerout', () => {
+      btnBg.setFillStyle(0x882222, 0.9);
+    });
+    btnBg.on('pointerdown', () => {
+      btnBg.setFillStyle(0x661111, 1);
+      if (onReturn) onReturn();
+    });
+
+    this._overlayPanel.add([btnBg, btnBorder, btnText]);
   }
 
   _destroyOverlayPanel() {
